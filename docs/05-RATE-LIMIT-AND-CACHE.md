@@ -13,19 +13,26 @@ Anonymous traffic is additionally capped by a global per-IP policy (`RL_ANON_MAX
 ### 1.2 Algorithm — sliding window log (ADR-002)
 One atomic Lua call per request. Keeps exact timestamps; no boundary bursts.
 
-`apps/gateway/src/rate-limit/lua/sliding_window.lua`
+Implemented in `apps/gateway/src/rate-limit/lua/sliding_window.lua`. The shipped script generalises the
+single-bucket version below in two ways, both decided in Sprint 3:
+- **Throttle first.** `KEYS[1]` is `throttle:{principal}`; a positive `PTTL` returns immediately, so a throttled
+  principal never touches a bucket.
+- **Several buckets, all-or-nothing.** `KEYS[2..n]` are the applicable buckets (the resolved policy, plus the
+  global anonymous cap for anon principals). The request is recorded only if *every* bucket has room, so a denied
+  request consumes nothing and one round trip covers all limits.
+
+Single-bucket core for reference:
 ```lua
 -- KEYS[1] = rl key
 -- ARGV[1] = now_ms, ARGV[2] = window_ms, ARGV[3] = max, ARGV[4] = member (now_ms:reqId)
 -- returns { allowed(0/1), remaining, reset_ms, retry_after_ms }
-local key      = KEYS[1]
-local now      = tonumber(ARGV[1])
-local window   = tonumber(ARGV[2])
-local max      = tonumber(ARGV[3])
-local member   = ARGV[4]
-local floor    = now - window
+local key    = KEYS[1]
+local now    = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local max    = tonumber(ARGV[3])
+local member = ARGV[4]
 
-redis.call('ZREMRANGEBYSCORE', key, 0, floor)
+redis.call('ZREMRANGEBYSCORE', key, 0, now - window)
 local count = redis.call('ZCARD', key)
 
 if count < max then
@@ -36,13 +43,14 @@ if count < max then
   return { 1, max - count - 1, reset, 0 }
 else
   local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
-  local reset  = tonumber(oldest[2]) + window
+  local reset  = (oldest[2] and (tonumber(oldest[2]) + window)) or (now + window)
   redis.call('PEXPIRE', key, window + 1000)
-  return { 0, 0, reset, reset - now }
+  return { 0, 0, reset, math.max(1, reset - now) }
 end
 ```
 
-Load once with `redis.defineCommand('slidingWindow', { numberOfKeys: 1, lua })` (ioredis) so it runs via `EVALSHA`.
+Loaded once with `redis.defineCommand('slidingWindow', { lua })` (ioredis) so it runs via `EVALSHA`, with an
+automatic `EVAL` fallback after a Redis restart.
 
 ### 1.3 Guard behaviour
 ```ts
@@ -61,6 +69,11 @@ if (!allowed) { res.set('Retry-After', Math.ceil(retryMs / 1000)); throw RateLim
 - After `window` elapses, requests allowed again; `X-RateLimit-Reset` matches within ±1 s.
 - 50 concurrent requests at max=10 → exactly 10 × 200, 40 × 429 (atomicity).
 - Redis stopped → requests succeed with `X-RateLimit-Degraded`.
+
+**Measured (Sprint 3, `docs/results/ratelimit-k6.txt`):** 500 rps for 60 s over 20 principals with a 100/60 s policy
+through the compose stack: 30,002 requests, 2,000 × 2xx (exactly 20 × 100), 28,001 × 429 against 28,000 expected,
+0 × 5xx, p95 = 1.32 ms for served requests. Chaos (`docs/results/chaos-redis-k6.txt`): Redis stopped for 10 s mid-run,
+0 × 5xx, 1,113 degraded responses, reconnect ~1 s after restart.
 
 ### 1.5 v1.1 stretch — token bucket policy type
 Adds `burst` and `refillPerSecond` to the policy; separate Lua script (`GET` bucket state, refill by elapsed time, `SET` with TTL). Useful for routes where short bursts are legitimate.

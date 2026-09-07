@@ -2,7 +2,7 @@
 
 > A self-hosted gateway that fronts your microservices with JWT/API-key auth, Redis-backed rate limiting and caching, LLM-assisted anomaly detection, and a real-time React dashboard.
 
-**Status:** Sprint 2 of 9 (kickoff 7 Sep 2026, v1.0 target 6 Nov 2026). Phase 1 core gateway: routing, proxying, JWT and API-key auth, readiness. Nothing is deployed yet.
+**Status:** Sprint 3 of 9 (kickoff 7 Sep 2026, v1.0 target 6 Nov 2026). Phase 1 done (routing, proxying, JWT and API-key auth, readiness); Phase 2 in progress (Redis sliding-window rate limiting live, response cache next). Nothing is deployed yet.
 **Stack:** NestJS 12 (Express) · Redis 7 · PostgreSQL 16 + Prisma · BullMQ · React 19 + Vite · TypeScript 6 · Docker
 
 ## Request lifecycle
@@ -18,6 +18,7 @@ Full design: [`docs/02-ARCHITECTURE.md`](docs/02-ARCHITECTURE.md). Start with [`
 apps/gateway        NestJS gateway + worker (data plane, admin API)
 apps/dashboard      React admin UI
 apps/mock-upstream  Tiny Express service the demo and tests proxy to
+load/               k6 scenarios
 packages/shared     DTO / contract types shared by both apps
 docs/               PRD, architecture + ADRs, specs, delivery plan, journal
 ```
@@ -44,6 +45,22 @@ TOKEN=$(docker compose exec gateway pnpm --silent mint-jwt -- --sub alice --scop
 curl -i -H "Authorization: Bearer $TOKEN" localhost:8080/api/orders/items     # 200, principal user:alice
 TOKEN=$(docker compose exec gateway pnpm --silent mint-jwt -- --sub bob --scope "other")
 curl -i -H "Authorization: Bearer $TOKEN" localhost:8080/api/orders/items     # 403 insufficient_scope
+```
+
+Rate limiting is visible on every response:
+
+```bash
+for i in $(seq 1 31); do curl -s -o /dev/null -w "%{http_code} " localhost:8080/api/mock/items; done; echo   # 30 x 200 then 429
+curl -si localhost:8080/api/mock/items | grep -iE '^HTTP|x-ratelimit|retry-after'
+```
+
+Load and chaos scenarios (k6 via Docker, results committed under `docs/results/`):
+
+```bash
+export JWT_SECRET=$(grep ^JWT_SECRET= .env | cut -d= -f2-)
+docker run --rm -i --add-host=host.docker.internal:host-gateway -v "$PWD/load:/scripts:ro" -v "$PWD/docs/results:/results" \
+  -e BASE_URL=http://host.docker.internal:8080 -e JWT_SECRET -e SUMMARY_PATH=/results/ratelimit-k6.txt \
+  grafana/k6 run /scripts/ratelimit.js                       # 500 rps x 60 s: 0 x 5xx, 429s within ±2 %, p95 < 25 ms
 ```
 
 If 6379 or 5432 are already used on your machine, set `REDIS_HOST_PORT` / `POSTGRES_HOST_PORT` in `.env`.

@@ -1,0 +1,28 @@
+OmniGate rate-limit load test - 2026-09-07T20:26:25.924Z
+target http://host.docker.internal:8080/api/orders/items | 500 rps x 60s | 20 principals x 100 req/window
+expected 429s: 28000 (±600)
+     ✓ status is 2xx or 429
+     ✓ has X-Request-Id
+     ✓ rate-limit headers present
+     ✓ 429 carries Retry-After
+
+   ✓ checks.........................: 100.00% ✓ 120004     ✗ 0    
+     data_received..................: 18 MB   303 kB/s
+     data_sent......................: 9.0 MB  150 kB/s
+     http_req_blocked...............: avg=9.21µs   min=667ns    med=1.66µs   max=26.19ms  p(90)=3.04µs  p(95)=4.5µs  
+     http_req_connecting............: avg=7.06µs   min=0s       med=0s       max=26.17ms  p(90)=0s      p(95)=0s     
+     http_req_duration..............: avg=916.39µs min=461.62µs med=836.08µs max=41.6ms   p(90)=1.11ms  p(95)=1.32ms 
+     ✓ { expected_response:true }...: avg=916.39µs min=461.62µs med=836.08µs max=41.6ms   p(90)=1.11ms  p(95)=1.32ms 
+     http_req_failed................: 0.00%   ✓ 0          ✗ 30002
+     http_req_receiving.............: avg=32.46µs  min=6.79µs   med=22.66µs  max=826.12µs p(90)=64.54µs p(95)=86.83µs
+     http_req_sending...............: avg=11.55µs  min=2.08µs   med=10.83µs  max=1ms      p(90)=17.04µs p(95)=22.33µs
+     http_req_tls_handshaking.......: avg=0s       min=0s       med=0s       max=0s       p(90)=0s      p(95)=0s     
+     http_req_waiting...............: avg=872.36µs min=435.91µs med=792.58µs max=41.57ms  p(90)=1.06ms  p(95)=1.27ms 
+     http_reqs......................: 30002   499.96679/s
+     iteration_duration.............: avg=997.67µs min=504.33µs med=905.33µs max=42.14ms  p(90)=1.21ms  p(95)=1.43ms 
+     iterations.....................: 30001   499.950125/s
+     status_2xx.....................: 2000    33.328897/s
+   ✓ status_429.....................: 28001   466.621228/s
+   ✓ status_5xx.....................: 0       0/s
+     vus............................: 0       min=0        max=2  
+     vus_max........................: 100     min=100      max=100

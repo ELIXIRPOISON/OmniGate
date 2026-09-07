@@ -137,5 +137,16 @@ If a migration must be reverted: migrations are additive by policy; write a new 
 | Postgres growth | `SELECT relname, pg_size_pretty(pg_total_relation_size(oid)) FROM pg_class WHERE relname LIKE 'audit_logs%'` |
 | LLM spend | `redis-cli GET llm:calls:$(date +%Y%m%d)` and provider dashboard |
 
+## 7a. Chaos check: Redis outage (docs/08 S3-06)
+Run before a release whenever the rate limiter or Redis client changed. Expected: no 5xx, `X-RateLimit-Degraded: true` while Redis is down, headers back within ~5 s of restart.
+```bash
+docker compose up -d && docker compose exec gateway pnpm seed      # once
+export JWT_SECRET=$(grep ^JWT_SECRET= .env | cut -d= -f2-)
+docker run --rm -i --add-host=host.docker.internal:host-gateway -v "$PWD/load:/scripts" \
+  -e BASE_URL=http://host.docker.internal:8080 -e JWT_SECRET -e DURATION_S=30 grafana/k6 run /scripts/ratelimit.js &
+sleep 10 && docker compose stop redis && sleep 10 && docker compose start redis; wait
+```
+The k6 summary shows `degraded_responses > 0` and `status_5xx = 0`. The same scenario runs automatically in CI as `test/chaos.integration-spec.ts` with a disposable Redis container.
+
 ## 8. Escalation (solo project)
 No on-call; if the public demo is down, `fly machines restart` first, then rollback. Keep a status note in the README if it stays down > 1 day.

@@ -2,6 +2,12 @@
 
 Five lines a day: done / blocked / decided. Newest first.
 
+## 2026-09-08 (Tue, evening) - Sprint 3
+- Done: S3-01 Lua loader on the shared Redis client (script shipped as a build asset). S3-02 sliding-window log in Lua, generalised to one atomic call that checks `throttle:{principal}` first and evaluates every applicable bucket all-or-nothing. S3-03 RateLimitGuard after AuthGuard: route -> key -> default policy, `X-RateLimit-Limit/Remaining/Reset`, `Retry-After`, throttle flag honoured, fail-open with `X-RateLimit-Degraded` (503 when `RL_FAIL_OPEN=false`), `rate_limited` in the log line. S3-04 anonymous per-IP cap as a second bucket. S3-05 k6 scenario: 30,002 requests, 2,000 accepted, 28,001 rejected vs 28,000 expected, 0 x 5xx, p95 1.32 ms (`docs/results/ratelimit-k6.txt`). S3-06 chaos: Redis stopped 10 s mid-run, 0 x 5xx, 1,113 degraded responses, reconnect ~1 s after restart, also automated as `chaos.integration-spec.ts` with a disposable container.
+- Decided: a denied request consumes nothing in any bucket (all-or-nothing across buckets), and the API key's policy travels in the key cache so the guard needs no second lookup.
+- Decided: k6 runs from the grafana/k6 image (nothing to install) and mints its own HS256 tokens, so the load test needs no database setup.
+- Next: Sprint 4 - CacheInterceptor (eligibility, HIT/MISS/BYPASS, Age), cache key with vary-on-principal, stampede lock, purge endpoint, k6 cache scenario.
+
 ## 2026-09-08 (Tue, later) - Sprint 2
 - Done: S2-01 Prisma 7 schema + `init` migration + idempotent seed (admin, 3 policies, 2 routes, demo key printed once; re-seeding rotates it). S2-02 JWT verifier (HS256 secret / RS256 JWKS, alg pinned, `sub`+`exp` required, 60 s skew). S2-03 API-key strategy (format check, prefix lookup with Redis read-through incl. negative caching, constant-time hash compare, 401/403 split, lastUsedAt at most once a minute). S2-04 AuthGuard on the proxy controller with scope check, anon principal = IP, `X-Gateway-Principal` forwarded. S2-05 `/readyz` (Redis PING + `SELECT 1`, 1 s budget each, 503 degraded). S2-06 Testcontainers integration suite + coverage artifact in CI. S2-07 README/spec pass.
 - Decided: Prisma 7 conventions (prisma.config.ts, generated client in src/generated, pg driver adapter) instead of the doc pack's Prisma 6 shape; `pnpm gen` produces shared dist + client before every root script.
