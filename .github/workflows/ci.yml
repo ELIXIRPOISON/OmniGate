@@ -26,10 +26,21 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      # Workspace packages resolve @omnigate/shared through its built dist, so build it before typecheck/tests.
-      - run: pnpm --filter @omnigate/shared build
+      # Workspace packages resolve @omnigate/shared through its built dist and the gateway needs its
+      # generated Prisma client, so produce both before typecheck/tests.
+      - run: pnpm gen
       - run: pnpm -r lint
       - run: pnpm -r typecheck
       - run: pnpm -r test
+      - name: Gateway unit coverage
+        run: pnpm --filter @omnigate/gateway test:cov
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gateway-coverage
+          path: apps/gateway/coverage/lcov.info
+          if-no-files-found: ignore
       - run: pnpm --filter @omnigate/gateway test:e2e
+      - name: Integration (Testcontainers: Redis 7 + Postgres 16)
+        run: pnpm --filter @omnigate/gateway test:integration
       - run: pnpm -r build

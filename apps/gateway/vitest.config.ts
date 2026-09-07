@@ -7,5 +7,11 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['**/*.spec.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text-summary', 'lcov'],
+      include: ['src/**/*.ts'],
+      exclude: ['src/generated/**', 'src/**/*.spec.ts', 'src/main.ts', 'src/cli/**', 'src/prisma/seed.ts'],
+    },
   },
 });

@@ -12,6 +12,8 @@ audit_logs 1───0..1 anomaly_events
 
 ## 2. Prisma schema (`apps/gateway/prisma/schema.prisma`)
 
+> Implemented with Prisma 7 (Sprint 2): the generator is `prisma-client` emitting TypeScript into `apps/gateway/src/generated/prisma` (git-ignored, produced by `pnpm gen`), the datasource URL lives in `apps/gateway/prisma.config.ts` instead of the schema, and the client connects through `@prisma/adapter-pg`. Model definitions are unchanged from the listing below.
+
 ```prisma
 generator client { provider = "prisma-client-js" }
 datasource db { provider = "postgresql"; url = env("DATABASE_URL") }

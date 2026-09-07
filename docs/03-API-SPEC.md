@@ -15,6 +15,13 @@ Forwards to the upstream registered for `{service}`.
 
 Routes with `auth_required: false` accept anonymous traffic; the principal becomes `{type:"anon", id: client_ip}` for rate limiting.
 
+Implementation notes (Sprint 2):
+- Credentials that are present are always validated, even on open routes; only a request with no `Authorization` and no `X-API-Key` becomes anonymous.
+- A route with a non-empty `scopes` list requires an authenticated principal; anonymous requests get 401. The principal needs **at least one** of the listed scopes, otherwise 403 with `WWW-Authenticate: Bearer error="insufficient_scope"`.
+- JWT claims: `sub` and `exp` are required; scopes are read from `scope` (space-delimited), `scp` or `scopes` (arrays). Clock skew tolerance is 60 s. `alg` must be `HS256` (secret) or `RS256` (JWKS); anything else is rejected.
+- API keys: 401 for unknown or malformed keys, 403 for revoked or expired ones. If the credential store is unreachable and the key is not cached, the gateway answers 503 `https://gw/errors/service-unavailable` rather than letting the request through.
+- 401 responses carry `WWW-Authenticate: Bearer realm="omnigate"`.
+
 **Request headers forwarded:** everything except hop-by-hop (`Connection`, `Keep-Alive`, `Transfer-Encoding`, `Upgrade`, `Proxy-*`, `TE`, `Trailer`) and `X-API-Key`. Added: `X-Request-Id`, `X-Forwarded-For`, `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Gateway-Principal: <type>:<id>`.
 
 **Response headers added by gateway:**
@@ -37,6 +44,7 @@ Routes with `auth_required: false` accept anonymous traffic; the principal becom
 | 404 | No route for `{service}` | `https://gw/errors/route-not-found` |
 | 429 | Rate limit exceeded or key throttled | `https://gw/errors/rate-limited` |
 | 502 | Upstream connection refused / reset | `https://gw/errors/bad-gateway` |
+| 503 | Credential store unreachable during authentication | `https://gw/errors/service-unavailable` |
 | 504 | Upstream timeout (`UPSTREAM_TIMEOUT_MS`, default 30000) | `https://gw/errors/gateway-timeout` |
 
 ### Error format — RFC 7807 `application/problem+json`

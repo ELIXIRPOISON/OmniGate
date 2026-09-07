@@ -1,5 +1,6 @@
 # Local development stack (docs/08 S1-08, docs/10 §2): gateway with hot reload, mock upstream,
-# Redis and Postgres. `docker compose up` then `curl -i localhost:8080/api/mock/items`.
+# Redis and Postgres. `docker compose up`, then seed once with
+# `docker compose exec gateway pnpm --filter @omnigate/gateway seed` and follow the printed curl.
 #
 # Values from ./.env (copy of .env.example) flow in via env_file; the entries under `environment`
 # override the ones that must point at container hostnames.
@@ -23,7 +24,11 @@ x-node: &node
 services:
   gateway:
     <<: *node
-    command: sh -c "pnpm --filter @omnigate/shared build && pnpm --filter @omnigate/gateway start:dev"
+    command: >
+      sh -c "pnpm --filter @omnigate/shared build
+      && pnpm --filter @omnigate/gateway prisma:generate
+      && pnpm --filter @omnigate/gateway prisma:migrate:deploy
+      && pnpm --filter @omnigate/gateway start:dev"
     ports:
       - "8080:8080"
     env_file:
@@ -54,7 +59,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/readyz"]
       interval: 15s
       timeout: 3s
       retries: 5

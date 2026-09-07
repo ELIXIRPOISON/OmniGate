@@ -2,6 +2,13 @@
 
 Five lines a day: done / blocked / decided. Newest first.
 
+## 2026-09-08 (Tue, later) - Sprint 2
+- Done: S2-01 Prisma 7 schema + `init` migration + idempotent seed (admin, 3 policies, 2 routes, demo key printed once; re-seeding rotates it). S2-02 JWT verifier (HS256 secret / RS256 JWKS, alg pinned, `sub`+`exp` required, 60 s skew). S2-03 API-key strategy (format check, prefix lookup with Redis read-through incl. negative caching, constant-time hash compare, 401/403 split, lastUsedAt at most once a minute). S2-04 AuthGuard on the proxy controller with scope check, anon principal = IP, `X-Gateway-Principal` forwarded. S2-05 `/readyz` (Redis PING + `SELECT 1`, 1 s budget each, 503 degraded). S2-06 Testcontainers integration suite + coverage artifact in CI. S2-07 README/spec pass.
+- Decided: Prisma 7 conventions (prisma.config.ts, generated client in src/generated, pg driver adapter) instead of the doc pack's Prisma 6 shape; `pnpm gen` produces shared dist + client before every root script.
+- Decided: presented credentials are always validated (even on open routes); scoped routes imply auth; credential store down + uncached key -> 503, never a silent allow.
+- Decided: Redis client never queues offline and every call goes through `safe()`; a missing Redis degrades readiness and the key cache but not auth.
+- Next: Sprint 3 - Redis Lua sliding window, RateLimitGuard + headers, anon per-IP cap, k6 rate-limit scenario, chaos test.
+
 ## 2026-09-08 (Tue) - Sprint 1, day 2
 - Done: S1-02 config (zod env + routes.yaml with `${VAR:-default}`), S1-03 request-id + pino one-line-per-request, S1-04 route resolver, S1-05 proxy (streams bodies, strips hop-by-hop/X-API-Key/X-Gateway-*, X-Forwarded-* trust-proxy aware, 502/504), S1-06 mock upstream, S1-07 RFC 7807 filter, S1-08 compose stack. 15 e2e + 55 unit tests green.
 - Decided: route resolution runs as Nest middleware bound to the ProxyController; the proxy is a controller so Sprint 2 guards slot in front of it (ADR-001). Timeout is enforced by the gateway's own timer (time to upstream headers) because the proxy engine's built-in timeout reports a plain socket reset.

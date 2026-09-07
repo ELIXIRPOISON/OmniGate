@@ -94,7 +94,7 @@ async function freePort(): Promise<number> {
 }
 
 // ---- suite -------------------------------------------------------------------------------------
-describe('gateway (e2e)', () => {
+describe('proxy (e2e, no data stores)', () => {
   let app: NestExpressApplication;
   let upstream: Server;
   let tmp: string;
@@ -111,9 +111,9 @@ describe('gateway (e2e)', () => {
       [
         'routes:',
         `  - { service: mock, upstream: "http://127.0.0.1:${port}", auth_required: false }`,
-        `  - { service: keep, upstream: "http://127.0.0.1:${port}", strip_prefix: false }`,
-        `  - { service: slow, upstream: "http://127.0.0.1:${port}", timeout_ms: 300 }`,
-        `  - { service: dead, upstream: "http://127.0.0.1:${deadPort}" }`,
+        `  - { service: keep, upstream: "http://127.0.0.1:${port}", strip_prefix: false, auth_required: false }`,
+        `  - { service: slow, upstream: "http://127.0.0.1:${port}", timeout_ms: 300, auth_required: false }`,
+        `  - { service: dead, upstream: "http://127.0.0.1:${deadPort}", auth_required: false }`,
         '',
       ].join('\n'),
     );
@@ -122,8 +122,9 @@ describe('gateway (e2e)', () => {
       NODE_ENV: 'test',
       LOG_LEVEL: 'silent',
       ROUTES_FILE: routesFile,
-      DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
-      REDIS_URL: 'redis://localhost:6379',
+      // closed ports: this suite runs without data stores and asserts the degraded readiness path
+      DATABASE_URL: `postgresql://u:p@127.0.0.1:${deadPort}/db`,
+      REDIS_URL: `redis://127.0.0.1:${deadPort}`,
       JWT_SECRET: 'test-secret-that-is-at-least-32-bytes-long',
       API_KEY_PEPPER: 'test-pepper-16chars',
       ADMIN_EMAIL: 'admin@example.com',
@@ -195,23 +196,23 @@ describe('gateway (e2e)', () => {
     expect(JSON.parse(del.body.body)).toEqual({ op: 'delete' });
   });
 
-  it('strips hop-by-hop, X-API-Key and X-Gateway-* headers before the upstream', async () => {
+  it('strips hop-by-hop and X-Gateway-* headers before the upstream', async () => {
+    // Credential headers are covered by the integration suite: presenting them here would be
+    // validated by the AuthGuard (and rejected, since no data stores are running).
     const res = await http()
       .get('/api/mock/echo')
-      .set('X-API-Key', 'gw_live_secret')
       .set('X-Gateway-Principal', 'spoofed')
       .set('Connection', 'keep-alive, X-Custom-Hop')
       .set('X-Custom-Hop', '1')
       .set('TE', 'trailers')
-      .set('Authorization', 'Bearer keep')
+      .set('X-Keep-Me', 'yes')
       .expect(200);
     const h = res.body.headers;
-    expect(h['x-api-key']).toBeUndefined();
-    expect(h['x-gateway-principal']).toBeUndefined();
+    expect(h['x-gateway-principal']).toMatch(/^anon:/);
     expect(h['x-custom-hop']).toBeUndefined();
     expect(h['te']).toBeUndefined();
     expect(h['keep-alive']).toBeUndefined();
-    expect(h['authorization']).toBe('Bearer keep');
+    expect(h['x-keep-me']).toBe('yes');
   });
 
   it('adds X-Forwarded-* from the real connection and ignores spoofed values', async () => {
@@ -289,6 +290,25 @@ describe('gateway (e2e)', () => {
     const res = await http().get('/healthz').expect(200);
     expect(res.body).toEqual({ status: 'ok' });
     expect(res.headers['x-request-id']).toMatch(UUID);
+  });
+
+  it('/readyz reports degraded with 503 when Redis and Postgres are unreachable', async () => {
+    const res = await http().get('/readyz').expect(503);
+    expect(res.body).toEqual({
+      status: 'degraded',
+      redis: 'error',
+      postgres: 'error',
+      routes: 4,
+    });
+  });
+
+  it('answers 503 for an uncached API key while the credential store is down (never a silent allow)', async () => {
+    const res = await http()
+      .get('/api/mock/items')
+      .set('X-API-Key', 'gw_live_' + 'a'.repeat(32));
+    // credential store unreachable -> 503 rather than a silent allow (auth is never skipped)
+    expect(res.status).toBe(503);
+    expect(res.body.type).toBe('https://gw/errors/service-unavailable');
   });
 
   it('renders framework 404s as problem+json too', async () => {
