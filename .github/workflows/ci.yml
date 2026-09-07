@@ -29,4 +29,5 @@ jobs:
       - run: pnpm -r lint
       - run: pnpm -r typecheck
       - run: pnpm -r test
+      - run: pnpm --filter @omnigate/gateway test:e2e
       - run: pnpm -r build
