@@ -25,3 +25,6 @@ pnpm-debug.log*
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Prisma client (regenerate with: pnpm --filter @omnigate/gateway prisma:generate)
+apps/gateway/src/generated/

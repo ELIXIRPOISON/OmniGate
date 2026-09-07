@@ -1,0 +1,130 @@
+// OmniGate control-plane schema. Source of truth: docs/04-DATA-MODEL.md section 2.
+// audit_logs is deliberately NOT here: it is created by a raw SQL migration in Sprint 7 (ADR-004).
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  runtime             = "nodejs"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum KeyStatus {
+  active
+  revoked
+}
+
+enum AnomalyMode {
+  off
+  async
+  sync
+}
+
+enum Verdict {
+  benign
+  suspicious
+  malicious
+}
+
+enum ReviewLabel {
+  true_positive
+  false_positive
+}
+
+model AdminUser {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  @@map("admin_users")
+}
+
+model RateLimitPolicy {
+  id            String   @id @default(uuid())
+  name          String   @unique
+  windowSeconds Int
+  maxRequests   Int
+  apiKeys       ApiKey[]
+  routes        Route[]
+  createdAt     DateTime @default(now())
+
+  @@map("rate_limit_policies")
+}
+
+model ApiKey {
+  id         String           @id @default(uuid())
+  name       String
+  /// "gw_live_" + first 8 chars of the random part; shown in the dashboard and used for lookup
+  prefix     String           @unique
+  /// sha256(API_KEY_PEPPER + raw key), hex
+  keyHash    String           @unique
+  scopes     String[]         @default([])
+  status     KeyStatus        @default(active)
+  policy     RateLimitPolicy? @relation(fields: [policyId], references: [id])
+  policyId   String?
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime         @default(now())
+  anomalies  AnomalyEvent[]
+
+  @@index([status])
+  @@map("api_keys")
+}
+
+model Route {
+  id              String           @id @default(uuid())
+  /// path segment after /api/
+  service         String           @unique
+  upstream        String
+  stripPrefix     Boolean          @default(true)
+  methods         String[]         @default(["*"])
+  authRequired    Boolean          @default(true)
+  scopes          String[]         @default([])
+  policy          RateLimitPolicy? @relation(fields: [policyId], references: [id])
+  policyId        String?
+  cacheTtlSeconds Int              @default(0)
+  anomalyMode     AnomalyMode      @default(async)
+  timeoutMs       Int              @default(30000)
+  enabled         Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  anomalies       AnomalyEvent[]
+
+  @@map("routes")
+}
+
+model AnomalyEvent {
+  id             String       @id @default(uuid())
+  requestId      String       @db.VarChar(64)
+  apiKey         ApiKey?      @relation(fields: [apiKeyId], references: [id])
+  apiKeyId       String?
+  route          Route?       @relation(fields: [routeId], references: [id])
+  routeId        String?
+  clientIp       String?
+  method         String
+  path           String
+  heuristicScore Float
+  llmScore       Float?
+  verdict        Verdict?
+  /// sqli, xss, traversal, cmd_injection, scraping, credential_stuffing, enumeration, dos, other
+  categories     String[]     @default([])
+  reasoning      String?
+  model          String?
+  llmLatencyMs   Int?
+  /// redacted and truncated
+  payloadSample  String?      @db.VarChar(2000)
+  blocked        Boolean      @default(false)
+  reviewed       Boolean      @default(false)
+  reviewLabel    ReviewLabel?
+  createdAt      DateTime     @default(now())
+
+  @@index([createdAt])
+  @@index([apiKeyId, createdAt])
+  @@index([llmScore])
+  @@map("anomaly_events")
+}

@@ -9,13 +9,17 @@ import { ProblemDetailsFilter } from './common/problem/problem-details.filter.js
 import { RequestIdMiddleware } from './common/request-id.middleware.js';
 import { ConfigModule } from './config/config.module.js';
 import { HealthModule } from './health/health.module.js';
+import { PrismaModule } from './prisma/prisma.module.js';
 import { ProxyModule } from './proxy/proxy.module.js';
+import { RedisModule } from './redis/redis.module.js';
 import { RoutingModule } from './routing/routing.module.js';
 
 @Module({
   imports: [
     ConfigModule,
     LoggerModule,
+    PrismaModule,
+    RedisModule,
     RoutingModule,
     ProxyModule,
     HealthModule,
