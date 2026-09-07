@@ -26,6 +26,8 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+      # Workspace packages resolve @omnigate/shared through its built dist, so build it before typecheck/tests.
+      - run: pnpm --filter @omnigate/shared build
       - run: pnpm -r lint
       - run: pnpm -r typecheck
       - run: pnpm -r test

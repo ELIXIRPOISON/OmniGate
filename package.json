@@ -11,9 +11,10 @@
   "scripts": {
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test",
+    "typecheck": "pnpm --filter @omnigate/shared build && pnpm -r typecheck",
+    "test": "pnpm --filter @omnigate/shared build && pnpm -r test",
     "dev:gateway": "pnpm --filter @omnigate/gateway start:dev",
-    "dev:dashboard": "pnpm --filter @omnigate/dashboard dev"
+    "dev:dashboard": "pnpm --filter @omnigate/dashboard dev",
+    "test:e2e": "pnpm --filter @omnigate/shared build && pnpm --filter @omnigate/gateway test:e2e"
   }
 }
