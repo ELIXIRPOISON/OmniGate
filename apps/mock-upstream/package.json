@@ -1,0 +1,28 @@
+{
+  "name": "@omnigate/mock-upstream",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tiny upstream used by the OmniGate demo, compose stack and load tests",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "start:dev": "node --watch src/main.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "oxlint src/",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "@types/supertest": "^7.0.0",
+    "oxlint": "^1.58.0",
+    "supertest": "^7.0.0",
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.2"
+  }
+}
