@@ -1,0 +1,19 @@
+{
+  "name": "omnigate",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OmniGate - AI-powered API gateway: JWT/API-key auth, Redis rate limiting and caching, LLM-assisted anomaly detection, React dashboard",
+  "packageManager": "pnpm@10.22.0",
+  "engines": {
+    "node": ">=22 <23",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "dev:gateway": "pnpm --filter @omnigate/gateway start:dev",
+    "dev:dashboard": "pnpm --filter @omnigate/dashboard dev"
+  }
+}

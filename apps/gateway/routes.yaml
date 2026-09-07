@@ -1,0 +1,24 @@
+# Bootstrap route registry, loaded at boot (FR-1.6). DB-backed routes arrive in Phase 4.
+# Schema: docs/03-API-SPEC.md "Route config". Seed equivalents: docs/04-DATA-MODEL.md section 4.
+#
+# Upstream hosts: use http://mock-upstream:3001 inside docker compose,
+# http://localhost:3001 when running the gateway directly on your machine.
+routes:
+  - service: mock
+    upstream: http://localhost:3001
+    strip_prefix: true
+    auth_required: false
+    rate_limit: { window_seconds: 60, max_requests: 100 }
+    cache_ttl_seconds: 15
+    anomaly_mode: async
+    timeout_ms: 30000
+
+  - service: orders
+    upstream: http://localhost:3001
+    strip_prefix: true
+    auth_required: true
+    scopes: [orders:read]
+    rate_limit: { window_seconds: 60, max_requests: 100 }
+    cache_ttl_seconds: 30
+    anomaly_mode: sync
+    timeout_ms: 30000
