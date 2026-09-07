@@ -16,7 +16,10 @@ export const ProblemType = {
   BadRequest: `${PROBLEM_TYPE_BASE}bad-request`,
   Unauthorized: `${PROBLEM_TYPE_BASE}unauthorized`,
   Forbidden: `${PROBLEM_TYPE_BASE}forbidden`,
+  /** No route registered for /api/{service}. */
   RouteNotFound: `${PROBLEM_TYPE_BASE}route-not-found`,
+  /** Any other unknown path (admin API, health, ...). */
+  NotFound: `${PROBLEM_TYPE_BASE}not-found`,
   RateLimited: `${PROBLEM_TYPE_BASE}rate-limited`,
   BadGateway: `${PROBLEM_TYPE_BASE}bad-gateway`,
   GatewayTimeout: `${PROBLEM_TYPE_BASE}gateway-timeout`,
