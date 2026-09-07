@@ -4,6 +4,7 @@ import type { Principal } from '@omnigate/shared';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import type { RateLimitPolicyRef } from '../rate-limit/policy.js';
 import { RedisService } from '../redis/redis.service.js';
 import {
   hashApiKey,
@@ -20,8 +21,15 @@ export interface CachedApiKey {
   status: 'active' | 'revoked';
   scopes: string[];
   policyId: string | null;
+  /** The key's rate-limit policy row, denormalised so the guard needs no second lookup. */
+  policy: RateLimitPolicyRef | null;
   /** ISO timestamp or null. */
   expiresAt: string | null;
+}
+
+export interface AuthenticatedApiKey {
+  principal: Principal;
+  policy: RateLimitPolicyRef | null;
 }
 
 export const KEY_CACHE_TTL_S = 60;
@@ -48,8 +56,8 @@ export class ApiKeyService {
     this.store = prismaStore(prisma);
   }
 
-  /** X-API-Key -> principal. 401 reasons: malformed/invalid; 403 reasons: revoked/key_expired; 503: unavailable. */
-  async authenticate(rawKey: string): Promise<Principal> {
+  /** X-API-Key -> principal (+ its policy). 401 reasons: malformed/invalid; 403: revoked/key_expired; 503: unavailable. */
+  async authenticate(rawKey: string): Promise<AuthenticatedApiKey> {
     if (!isApiKeyFormat(rawKey))
       throw new AuthError('malformed', 'Malformed API key');
     const prefix = lookupPrefixOf(rawKey);
@@ -66,7 +74,10 @@ export class ApiKeyService {
       throw new AuthError('key_expired', 'API key has expired');
     }
     this.touch(record.id);
-    return { type: 'api_key', id: record.id, scopes: record.scopes };
+    return {
+      principal: { type: 'api_key', id: record.id, scopes: record.scopes },
+      policy: record.policy,
+    };
   }
 
   /** Drop the cached record so a revoke/rotate takes effect immediately (docs/09 auth table). */
@@ -133,6 +144,7 @@ export function toHash(record: CachedApiKey): Record<string, string> {
     status: record.status,
     scopes: JSON.stringify(record.scopes),
     policyId: record.policyId ?? '',
+    policy: record.policy ? JSON.stringify(record.policy) : '',
     expiresAt: record.expiresAt ?? '',
   };
 }
@@ -144,8 +156,30 @@ export function fromHash(hash: Record<string, string>): CachedApiKey {
     status: hash.status === 'active' ? 'active' : 'revoked',
     scopes: safeJsonArray(hash.scopes),
     policyId: hash.policyId || null,
+    policy: safePolicy(hash.policy),
     expiresAt: hash.expiresAt || null,
   };
+}
+
+function safePolicy(value: string | undefined): RateLimitPolicyRef | null {
+  if (!value) return null;
+  try {
+    const p = JSON.parse(value) as Partial<RateLimitPolicyRef>;
+    if (
+      typeof p.id === 'string' &&
+      typeof p.windowSeconds === 'number' &&
+      typeof p.maxRequests === 'number'
+    ) {
+      return {
+        id: p.id,
+        windowSeconds: p.windowSeconds,
+        maxRequests: p.maxRequests,
+      };
+    }
+  } catch {
+    /* fall through */
+  }
+  return null;
 }
 
 function safeJsonArray(value: string | undefined): string[] {
@@ -162,7 +196,10 @@ function safeJsonArray(value: string | undefined): string[] {
 export function prismaStore(prisma: PrismaService): ApiKeyStore {
   return {
     async findByPrefix(prefix) {
-      const row = await prisma.apiKey.findUnique({ where: { prefix } });
+      const row = await prisma.apiKey.findUnique({
+        where: { prefix },
+        include: { policy: true },
+      });
       if (!row) return null;
       return {
         id: row.id,
@@ -170,6 +207,13 @@ export function prismaStore(prisma: PrismaService): ApiKeyStore {
         status: row.status,
         scopes: row.scopes,
         policyId: row.policyId,
+        policy: row.policy
+          ? {
+              id: row.policy.id,
+              windowSeconds: row.policy.windowSeconds,
+              maxRequests: row.policy.maxRequests,
+            }
+          : null,
         expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
       };
     },

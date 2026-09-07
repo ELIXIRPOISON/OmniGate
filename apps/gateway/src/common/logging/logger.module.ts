@@ -27,6 +27,7 @@ function requestSummary(req: Req, res: Res, responseTimeMs: number) {
       ? { principal: `${req.principal.type}:${req.principal.id}` }
       : {}),
     ...(typeof upstreamMs === 'number' ? { upstream_ms: upstreamMs } : {}),
+    ...(res.locals?.rate_limited ? { rate_limited: true } : {}),
     ...(req.ip ? { client_ip: req.ip } : {}),
   };
 }

@@ -51,10 +51,10 @@ function fakeRedis(absent = false) {
 }
 
 function fakePrisma(rows: Array<{ prefix: string } & Record<string, unknown>>) {
-  const findUnique = vi.fn(
-    async ({ where }: { where: { prefix: string } }) =>
-      rows.find((r) => r.prefix === where.prefix) ?? null,
-  );
+  const findUnique = vi.fn(async ({ where }: { where: { prefix: string } }) => {
+    const r = rows.find((x) => x.prefix === where.prefix);
+    return r ? { policy: null, ...r } : null;
+  });
   const update = vi.fn(async () => ({}));
   return {
     prisma: { apiKey: { findUnique, update } } as unknown as PrismaService,
@@ -79,6 +79,7 @@ function row(
     status: 'active',
     scopes: ['orders:read'],
     policyId: null,
+    policy: null,
     expiresAt: null,
     ...over,
   };
@@ -90,9 +91,8 @@ describe('ApiKeyService', () => {
     const { prisma } = fakePrisma([r]);
     const svc = new ApiKeyService(env, prisma, fakeRedis(true), logger);
     await expect(svc.authenticate(r.raw)).resolves.toEqual({
-      type: 'api_key',
-      id: 'k1',
-      scopes: ['orders:read'],
+      principal: { type: 'api_key', id: 'k1', scopes: ['orders:read'] },
+      policy: null,
     });
   });
 
@@ -195,7 +195,8 @@ describe('ApiKeyService', () => {
       keyHash: 'h',
       status: 'active',
       scopes: ['a', 'b'],
-      policyId: null,
+      policyId: 'p1',
+      policy: { id: 'p1', windowSeconds: 60, maxRequests: 10 },
       expiresAt: null,
     };
     expect(fromHash(toHash(rec))).toEqual(rec);

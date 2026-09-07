@@ -50,10 +50,9 @@ export class AuthGuard implements CanActivate {
         );
       }
       if (apiKey !== undefined) {
-        return this.requireScopes(
-          await this.apiKeys.authenticate(apiKey),
-          route,
-        );
+        const { principal, policy } = await this.apiKeys.authenticate(apiKey);
+        req.keyPolicy = policy;
+        return this.requireScopes(principal, route);
       }
     } catch (err) {
       throw authErrorToProblem(err);

@@ -45,7 +45,10 @@ function guardWith(
 ) {
   return new AuthGuard(
     { verify: async () => user, ...jwt } as JwtVerifier,
-    { authenticate: async () => key, ...keys } as ApiKeyService,
+    {
+      authenticate: async () => ({ principal: key, policy: null }),
+      ...keys,
+    } as ApiKeyService,
   );
 }
 
@@ -78,7 +81,9 @@ describe('AuthGuard', () => {
   });
 
   it('authenticates a bearer token before an API key when both are present', async () => {
-    const keys = { authenticate: vi.fn(async () => key) };
+    const keys = {
+      authenticate: vi.fn(async () => ({ principal: key, policy: null })),
+    };
     const { ctx, req } = ctxFor(
       { authorization: 'Bearer t', 'x-api-key': 'gw_live_x' },
       route(),

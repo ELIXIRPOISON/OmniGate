@@ -3,6 +3,7 @@ import type { NextFunction, Response } from 'express';
 import type { GatewayRequest } from '../common/gateway-request.js';
 import { AuthGuard } from '../auth/auth.guard.js';
 import { Problems } from '../common/problem/problem.js';
+import { RateLimitGuard } from '../rate-limit/rate-limit.guard.js';
 import { ProxyService } from './proxy.service.js';
 
 /**
@@ -11,7 +12,7 @@ import { ProxyService } from './proxy.service.js';
  * slot in front of the proxy the normal Nest way (ADR-001).
  */
 @Controller('api')
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, RateLimitGuard)
 export class ProxyController {
   constructor(private readonly proxy: ProxyService) {}
 
