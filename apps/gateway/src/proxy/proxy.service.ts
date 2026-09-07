@@ -12,6 +12,7 @@ import { PinoLogger } from 'nestjs-pino';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { pathOf, type GatewayRequest } from '../common/gateway-request.js';
+import { formatPrincipal } from '@omnigate/shared';
 import { Problems, sendProblem } from '../common/problem/problem.js';
 import { ensureRequestId } from '../common/request-id.js';
 import { prepareUpstreamHeaders } from './headers.js';
@@ -101,6 +102,7 @@ export class ProxyService {
       protocol: req.protocol,
       host: req.headers.host,
       trustProxy: this.env.TRUST_PROXY,
+      principal: req.principal ? formatPrincipal(req.principal) : undefined,
     });
 
     const state = this.state(res);

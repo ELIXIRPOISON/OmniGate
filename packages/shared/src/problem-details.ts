@@ -23,6 +23,8 @@ export const ProblemType = {
   RateLimited: `${PROBLEM_TYPE_BASE}rate-limited`,
   BadGateway: `${PROBLEM_TYPE_BASE}bad-gateway`,
   GatewayTimeout: `${PROBLEM_TYPE_BASE}gateway-timeout`,
+  /** A dependency the request needs (e.g. the credential store) is unreachable. */
+  ServiceUnavailable: `${PROBLEM_TYPE_BASE}service-unavailable`,
   Internal: `${PROBLEM_TYPE_BASE}internal`,
 } as const;
 

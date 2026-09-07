@@ -27,6 +27,8 @@ export interface ForwardingContext {
   host?: string;
   /** When true, inbound X-Forwarded-* from the previous hop are kept and appended to (T3). */
   trustProxy: boolean;
+  /** "<type>:<id>" of the authenticated principal, forwarded as X-Gateway-Principal. */
+  principal?: string;
 }
 
 /**
@@ -70,5 +72,6 @@ export function prepareUpstreamHeaders(
   else delete headers['x-forwarded-host'];
 
   headers['x-request-id'] = ctx.requestId;
+  if (ctx.principal) headers['x-gateway-principal'] = ctx.principal;
   return headers;
 }

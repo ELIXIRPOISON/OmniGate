@@ -9,6 +9,7 @@ import { ensureRequestId } from '../request-id.js';
 type Res = ServerResponse & { locals?: Record<string, unknown> };
 type Req = IncomingMessage & {
   gw?: { service: string };
+  principal?: { type: string; id: string };
   ip?: string;
   originalUrl?: string;
 };
@@ -22,6 +23,9 @@ function requestSummary(req: Req, res: Res, responseTimeMs: number) {
     status: res.statusCode,
     latency_ms: Math.round(responseTimeMs),
     ...(req.gw ? { service: req.gw.service } : {}),
+    ...(req.principal
+      ? { principal: `${req.principal.type}:${req.principal.id}` }
+      : {}),
     ...(typeof upstreamMs === 'number' ? { upstream_ms: upstreamMs } : {}),
     ...(req.ip ? { client_ip: req.ip } : {}),
   };

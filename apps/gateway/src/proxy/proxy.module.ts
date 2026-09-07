@@ -3,13 +3,14 @@ import {
   Module,
   type NestModule,
 } from '@nestjs/common';
+import { AuthModule } from '../auth/auth.module.js';
 import { RouteResolverMiddleware } from '../routing/route-resolver.middleware.js';
 import { RoutingModule } from '../routing/routing.module.js';
 import { ProxyController } from './proxy.controller.js';
 import { ProxyService } from './proxy.service.js';
 
 @Module({
-  imports: [RoutingModule],
+  imports: [RoutingModule, AuthModule],
   controllers: [ProxyController],
   providers: [ProxyService],
 })

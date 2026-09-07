@@ -1,10 +1,13 @@
 import type { Request } from 'express';
+import type { Principal } from '@omnigate/shared';
 import type { ResolvedRoute } from '../routing/route-resolver.js';
 
 /** Express request enriched by the gateway pipeline. */
 export interface GatewayRequest extends Request {
   /** Set by RouteResolverMiddleware for every /api/* request. */
   gw?: ResolvedRoute;
+  /** Set by AuthGuard: user (JWT), api_key, or anon (client IP) on open routes. */
+  principal?: Principal;
 }
 
 export function pathOf(url: string | undefined): string {

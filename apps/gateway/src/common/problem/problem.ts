@@ -56,6 +56,8 @@ export function typeFor(status: number): string {
       return ProblemType.RateLimited;
     case 502:
       return ProblemType.BadGateway;
+    case 503:
+      return ProblemType.ServiceUnavailable;
     case 504:
       return ProblemType.GatewayTimeout;
     default:
@@ -83,8 +85,23 @@ function make(
 /** Factory for every problem the gateway itself produces (docs/03 status table). */
 export const Problems = {
   badRequest: (detail: string) => make(400, ProblemType.BadRequest, detail),
-  unauthorized: (detail: string) => make(401, ProblemType.Unauthorized, detail),
-  forbidden: (detail: string) => make(403, ProblemType.Forbidden, detail),
+  unauthorized: (detail: string) =>
+    make(401, ProblemType.Unauthorized, detail, {
+      headers: { 'WWW-Authenticate': 'Bearer realm="omnigate"' },
+    }),
+  forbidden: (detail: string, headers?: Record<string, string>) =>
+    make(403, ProblemType.Forbidden, detail, headers ? { headers } : undefined),
+  insufficientScope: (detail: string) =>
+    make(403, ProblemType.Forbidden, detail, {
+      headers: {
+        'WWW-Authenticate':
+          'Bearer realm="omnigate", error="insufficient_scope"',
+      },
+    }),
+  serviceUnavailable: (detail: string) =>
+    make(503, ProblemType.ServiceUnavailable, detail, {
+      headers: { 'Retry-After': '5' },
+    }),
   routeNotFound: (service?: string) =>
     make(
       404,
