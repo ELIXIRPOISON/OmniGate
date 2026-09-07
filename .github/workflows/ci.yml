@@ -16,6 +16,16 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: No AI attribution anywhere in the commit history
+        run: |
+          if git log --format='%H %B' | grep -iE 'Co-Authored-By:.*(claude|anthropic)|Claude-Session:'; then
+            echo "::error::a commit message carries an AI attribution trailer; rewrite it before merging"
+            exit 1
+          fi
+          echo "commit history clean"
 
       - uses: pnpm/action-setup@v4
         # version is read from "packageManager" in package.json
