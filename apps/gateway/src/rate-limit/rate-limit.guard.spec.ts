@@ -13,6 +13,8 @@ const env = {
   RL_DEFAULT_MAX: 100,
   RL_ANON_MAX: 30,
   RL_FAIL_OPEN: true,
+  RL_COUNT_CACHE_HITS: true,
+  CACHE_DEFAULT_VARY_ON_PRINCIPAL: true,
 } as Env;
 const logger = {
   setContext() {},
@@ -54,10 +56,12 @@ function fakeRedis(
   };
 }
 
+type KeyPolicy = { id: string; windowSeconds: number; maxRequests: number };
+
 function ctxFor(
   principal: Principal,
   r: RouteConfig,
-  keyPolicy?: { id: string; windowSeconds: number; maxRequests: number },
+  opts: { keyPolicy?: KeyPolicy; method?: string } = {},
 ) {
   const headers = new Map<string, string>();
   const res = {
@@ -66,9 +70,12 @@ function ctxFor(
   };
   const req = {
     id: 'req-1',
+    method: opts.method ?? 'GET',
+    originalUrl: '/api/svc/x',
+    headers: {},
     gw: { route: r, service: r.service, upstreamPath: '/' },
     principal,
-    keyPolicy,
+    keyPolicy: opts.keyPolicy,
   };
   const ctx = {
     switchToHttp: () => ({ getRequest: () => req, getResponse: () => res }),
@@ -89,6 +96,8 @@ async function problemOf(p: Promise<unknown>) {
 const user: Principal = { type: 'user', id: 'alice', scopes: [] };
 const anon: Principal = { type: 'anon', id: '203.0.113.9', scopes: [] };
 
+// script call layout: numKeys, throttleKey, ...bucketKeys, [cacheKey], now, member, bucketCount, ...(window, max)
+
 describe('RateLimitGuard', () => {
   it('allows and sets X-RateLimit-* headers from the resolved route policy', async () => {
     const { redis, calls } = fakeRedis({
@@ -104,32 +113,29 @@ describe('RateLimitGuard', () => {
     expect(headers.get('x-ratelimit-limit')).toBe('42');
     expect(headers.get('x-ratelimit-remaining')).toBe('41');
     expect(headers.get('x-ratelimit-reset')).toBe('1800000001');
-    // numKeys, throttle key, bucket key, now, member, window, max
     expect(calls[0].slice(0, 3)).toEqual([
       2,
       'throttle:user:alice',
       'rl:route:svc:user:alice',
     ]);
-    expect(calls[0].slice(5)).toEqual([60_000, 42]);
+    expect(calls[0].slice(5)).toEqual([1, 60_000, 42]);
   });
 
   it('uses the API key policy when the route has none, else the default', async () => {
     const keyed = fakeRedis();
+    const keyPolicy = { id: 'p1', windowSeconds: 10, maxRequests: 5 };
     await new RateLimitGuard(env, keyed.redis, logger).canActivate(
-      ctxFor({ type: 'api_key', id: 'k1', scopes: [] }, route(), {
-        id: 'p1',
-        windowSeconds: 10,
-        maxRequests: 5,
-      }).ctx,
+      ctxFor({ type: 'api_key', id: 'k1', scopes: [] }, route(), { keyPolicy })
+        .ctx,
     );
     expect(keyed.calls[0][2]).toBe('rl:p1:api_key:k1');
-    expect(keyed.calls[0].slice(5)).toEqual([10_000, 5]);
+    expect(keyed.calls[0].slice(5)).toEqual([1, 10_000, 5]);
     const dflt = fakeRedis();
     await new RateLimitGuard(env, dflt.redis, logger).canActivate(
       ctxFor(user, route()).ctx,
     );
     expect(dflt.calls[0][2]).toBe('rl:default:user:alice');
-    expect(dflt.calls[0].slice(5)).toEqual([60_000, 100]);
+    expect(dflt.calls[0].slice(5)).toEqual([1, 60_000, 100]);
   });
 
   it('denies with 429, Retry-After and the rate_limited flag for the log line', async () => {
@@ -157,7 +163,7 @@ describe('RateLimitGuard', () => {
       'rl:default:anon:203.0.113.9',
       'rl:anon:anon:203.0.113.9',
     ]);
-    expect(calls[0].slice(6)).toEqual([60_000, 100, 60_000, 30]);
+    expect(calls[0].slice(6)).toEqual([2, 60_000, 100, 60_000, 30]);
     expect(headers.get('x-ratelimit-limit')).toBe('30');
     expect(headers.get('x-ratelimit-remaining')).toBe('2');
   });
@@ -184,6 +190,27 @@ describe('RateLimitGuard', () => {
     );
     expect(p).toMatchObject({ status: 429, retryAfter: 25 });
     expect(p.detail).toContain('throttled');
+  });
+
+  it('passes the cache key as an extra KEY when RL_COUNT_CACHE_HITS=false and the request is cacheable', async () => {
+    const cachedEnv = { ...env, RL_COUNT_CACHE_HITS: false };
+    const cacheable = route({ cache_ttl_seconds: 30 });
+    const get = fakeRedis();
+    await new RateLimitGuard(cachedEnv, get.redis, logger).canActivate(
+      ctxFor(user, cacheable).ctx,
+    );
+    expect(get.calls[0][0]).toBe(3);
+    expect(String(get.calls[0][3])).toMatch(/^cache:svc:[0-9a-f]{40}$/);
+    const post = fakeRedis();
+    await new RateLimitGuard(cachedEnv, post.redis, logger).canActivate(
+      ctxFor(user, cacheable, { method: 'POST' }).ctx,
+    );
+    expect(post.calls[0][0]).toBe(2);
+    const counting = fakeRedis();
+    await new RateLimitGuard(env, counting.redis, logger).canActivate(
+      ctxFor(user, cacheable).ctx,
+    );
+    expect(counting.calls[0][0]).toBe(2);
   });
 
   it('fails open with X-RateLimit-Degraded when Redis is down or errors', async () => {

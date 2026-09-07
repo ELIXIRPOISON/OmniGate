@@ -29,6 +29,8 @@ export const envSchema = z
     ADMIN_EMAIL: z.email(),
     ADMIN_PASSWORD: z.string().min(1),
     ADMIN_JWT_SECRET: z.string().min(16),
+    /** Static bearer token for the admin API until Sprint 7 ships admin login; unset = admin API disabled. */
+    ADMIN_TOKEN: z.string().min(16).optional(),
     CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
 
     MAX_BODY_BYTES: int().positive().default(1_048_576),

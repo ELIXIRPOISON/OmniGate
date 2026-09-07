@@ -49,6 +49,7 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
       ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:-dev-only-must-differ-from-JWT_SECRET}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-only-admin-token-change-me}
       LLM_PROVIDER: ${LLM_PROVIDER:-fake}
       LLM_API_KEY: ${LLM_API_KEY:-}
     depends_on:

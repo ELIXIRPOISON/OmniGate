@@ -42,20 +42,29 @@ export function registerSlidingWindow(client: Redis): void {
   client.defineCommand('slidingWindow', { lua: SLIDING_WINDOW_LUA });
 }
 
-/** One round trip: throttle check + every bucket, atomically. */
+/**
+ * One round trip: throttle check + every bucket, atomically. When `skipIfCached` is given and that
+ * cache key exists, the request is reported as allowed without consuming a slot (RL_COUNT_CACHE_HITS=false).
+ */
 export async function runSlidingWindow(
   client: Redis,
   throttleKey: string,
   buckets: BucketSpec[],
   nowMs: number,
   member: string,
+  skipIfCached?: string,
 ): Promise<SlidingWindowDecision> {
-  const raw = await client.slidingWindow(
-    buckets.length + 1,
+  const keys = [
     throttleKey,
     ...buckets.map((b) => b.key),
+    ...(skipIfCached ? [skipIfCached] : []),
+  ];
+  const raw = await client.slidingWindow(
+    keys.length,
+    ...keys,
     nowMs,
     member,
+    buckets.length,
     ...buckets.flatMap((b) => [b.windowMs, b.max]),
   );
   return parseSlidingWindowResult(raw, buckets.length);

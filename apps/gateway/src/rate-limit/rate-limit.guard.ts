@@ -7,7 +7,8 @@ import {
 import type { Response } from 'express';
 import { PinoLogger } from 'nestjs-pino';
 import { formatPrincipal } from '@omnigate/shared';
-import type { GatewayRequest } from '../common/gateway-request.js';
+import { planCache } from '../cache/cache-plan.js';
+import { pathOf, type GatewayRequest } from '../common/gateway-request.js';
 import { Problems } from '../common/problem/problem.js';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
@@ -73,6 +74,25 @@ export class RateLimitGuard implements CanActivate {
       checks.push({ key: rateLimitKey(anon.id, who), policy: anon });
     }
 
+    // RL_COUNT_CACHE_HITS=false: a request that will be served from the cache must not consume a slot.
+    let skipIfCached: string | undefined;
+    if (!this.env.RL_COUNT_CACHE_HITS) {
+      const url = req.originalUrl ?? req.url ?? '/';
+      const q = url.indexOf('?');
+      const plan = planCache(
+        {
+          method: req.method,
+          path: pathOf(url),
+          query: q === -1 ? '' : url.slice(q),
+          headers: req.headers,
+        },
+        route,
+        principal,
+        this.env,
+      );
+      if (plan.mode === 'lookup') skipIfCached = plan.key;
+    }
+
     let decision: SlidingWindowDecision;
     try {
       if (!this.redis.isReady) throw new Error('redis not connected');
@@ -86,6 +106,7 @@ export class RateLimitGuard implements CanActivate {
         })),
         Date.now(),
         `${Date.now()}:${String(req.id)}`,
+        skipIfCached,
       );
     } catch (err) {
       if (!this.env.RL_FAIL_OPEN)

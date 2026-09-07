@@ -28,6 +28,9 @@ function requestSummary(req: Req, res: Res, responseTimeMs: number) {
       : {}),
     ...(typeof upstreamMs === 'number' ? { upstream_ms: upstreamMs } : {}),
     ...(res.locals?.rate_limited ? { rate_limited: true } : {}),
+    ...(typeof res.locals?.cache_status === 'string'
+      ? { cache_status: res.locals.cache_status }
+      : {}),
     ...(req.ip ? { client_ip: req.ip } : {}),
   };
 }

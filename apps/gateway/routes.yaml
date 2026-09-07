@@ -20,3 +20,14 @@ routes:
     rate_limit: { window_seconds: 60, max_requests: 100 }
     cache_ttl_seconds: 30
     anomaly_mode: sync
+
+  # Public catalogue data: identical for every caller, so one shared cache entry per path
+  # (cache_vary_on_principal: false) and a policy generous enough for the k6 cache scenario.
+  - service: catalog
+    upstream: ${MOCK_UPSTREAM_URL:-http://localhost:3001}
+    strip_prefix: true
+    auth_required: true
+    rate_limit: { window_seconds: 60, max_requests: 5000 }
+    cache_ttl_seconds: 30
+    cache_vary_on_principal: false
+    anomaly_mode: async

@@ -26,6 +26,8 @@ export const routeSchema = z.object({
     })
     .optional(),
   cache_ttl_seconds: z.number().int().min(0).default(0),
+  /** Include the authenticated principal in the cache key. Defaults to CACHE_DEFAULT_VARY_ON_PRINCIPAL. */
+  cache_vary_on_principal: z.boolean().optional(),
   anomaly_mode: z.enum(['off', 'async', 'sync']).default('async'),
   timeout_ms: z.number().int().positive().optional(),
   enabled: z.boolean().default(true),

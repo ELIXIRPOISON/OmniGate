@@ -4,6 +4,7 @@ import {
   type NestModule,
 } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
+import { AdminModule } from './admin/admin.module.js';
 import { LoggerModule } from './common/logging/logger.module.js';
 import { ProblemDetailsFilter } from './common/problem/problem-details.filter.js';
 import { RequestIdMiddleware } from './common/request-id.middleware.js';
@@ -23,6 +24,7 @@ import { RoutingModule } from './routing/routing.module.js';
     RoutingModule,
     ProxyModule,
     HealthModule,
+    AdminModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: ProblemDetailsFilter }],
 })
