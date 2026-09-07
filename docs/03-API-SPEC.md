@@ -106,7 +106,7 @@ All endpoints require `Authorization: Bearer <admin JWT>` except `POST /auth/log
 | POST | `/routes` | same shape as yaml entry; validates upstream is `http(s)://` and not a private IP unless `ALLOW_PRIVATE_UPSTREAMS=true` |
 | PATCH | `/routes/:id` | |
 | DELETE | `/routes/:id` | |
-| POST | `/routes/:id/cache/purge` | → `{deletedKeys}` |
+| POST | `/routes/:id/cache/purge` | → `{routeId, deletedKeys}`. Live since Sprint 4: until the admin login ships (Sprint 7) it is protected by `Authorization: Bearer <ADMIN_TOKEN>` (static env var; unset = admin API answers 503) and `:id` is the route's `service` name. |
 | POST | `/routes/reload` | force registry refresh |
 
 ### Rate-limit policies

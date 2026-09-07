@@ -104,9 +104,19 @@ On MISS, `SET lock:{key} 1 NX PX 2000`; if lock not acquired, wait up to 200 ms 
 ### 2.5 Purge
 `POST /admin/v1/routes/:id/cache/purge` → `SMEMBERS cache:idx:{routeId}` → `UNLINK` in chunks of 500 → `DEL idx`.
 
+### 2.5a Implementation notes (Sprint 4)
+- Lives in `apps/gateway/src/cache/` as a Nest interceptor on the proxy controller, so cached responses are still authenticated and, by default, rate limited (see `RL_COUNT_CACHE_HITS` below).
+- On a MISS the proxy streams normally; the interceptor tees the bytes going to the client (`captureResponse`) and stores them after the response ends. Bodies above `CACHE_MAX_BODY_BYTES` are streamed but not kept.
+- Vary on principal: authenticated principals (`user:`, `api_key:`) get their own entries; **anonymous callers share one entry** (a public route's answer does not depend on the caller's IP). `cache_vary_on_principal: false` on a route shares entries across everyone, e.g. for public catalogue data.
+- Not stored: statuses outside {200, 203, 204, 301, 404}, upstream `Cache-Control: private|no-store`, responses with `Set-Cookie`.
+- `Cache-Control: no-store` on the request skips the cache entirely (no `X-Cache` header); `no-cache` (or `Pragma: no-cache`) skips the lookup but refreshes the entry (`X-Cache: BYPASS`).
+- `RL_COUNT_CACHE_HITS=false` is implemented inside the rate-limit Lua call: the cache key is passed as an extra KEY and, if it exists, the request is allowed without consuming a slot. Default `true` keeps counting hits (protects against cache-busting probes).
+- Index sets (`cache:idx:{route}`) carry a TTL of the route TTL + 60 s so abandoned routes do not pin memory.
+
 ### 2.6 Metrics to expose
 - `cache_status` per audit row → dashboard computes hit ratio = HIT / (HIT+MISS) per route.
 - Target for demo: ≥60 % on the `mock` route under the k6 read scenario.
+- **Measured (Sprint 4, `docs/results/cache-k6.txt`):** 300 rps for 90 s, 90 % GET over 20 hot paths on the shared-cache `catalog` route, 10 % POST: 27,002 requests, hit ratio 99.75 % (24,182 HIT / 60 MISS), p95 HIT 1.87 ms, p95 MISS 4.05 ms, 0 × 5xx, 0 × 429. Stampede lock verified by integration test: 50 concurrent misses on one key reached the upstream once.
 
 ## 3. Configuration reference (env)
 | Var | Default | Notes |
@@ -117,4 +127,5 @@ On MISS, `SET lock:{key} 1 NX PX 2000`; if lock not acquired, wait up to 200 ms 
 | `RL_COUNT_CACHE_HITS` | true | |
 | `RL_FAIL_OPEN` | true | set false to return 503 when Redis is down |
 | `CACHE_MAX_BODY_BYTES` | 262144 | |
-| `CACHE_DEFAULT_VARY_ON_PRINCIPAL` | true | |
+| `CACHE_DEFAULT_VARY_ON_PRINCIPAL` | true | per-route override: `cache_vary_on_principal` in routes.yaml |
+| `ADMIN_TOKEN` | (unset) | temporary static bearer token for `/admin/v1/*` until Sprint 7 |

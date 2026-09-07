@@ -2,7 +2,7 @@
 
 > A self-hosted gateway that fronts your microservices with JWT/API-key auth, Redis-backed rate limiting and caching, LLM-assisted anomaly detection, and a real-time React dashboard.
 
-**Status:** Sprint 3 of 9 (kickoff 7 Sep 2026, v1.0 target 6 Nov 2026). Phase 1 done (routing, proxying, JWT and API-key auth, readiness); Phase 2 in progress (Redis sliding-window rate limiting live, response cache next). Nothing is deployed yet.
+**Status:** Sprint 4 of 9 (kickoff 7 Sep 2026, v1.0 target 6 Nov 2026). Phase 1 done (routing, proxying, JWT and API-key auth, readiness) and Phase 2 done (Redis sliding-window rate limiting, response cache with purge). AI anomaly detection is next. Nothing is deployed yet.
 **Stack:** NestJS 12 (Express) · Redis 7 · PostgreSQL 16 + Prisma · BullMQ · React 19 + Vite · TypeScript 6 · Docker
 
 ## Request lifecycle
@@ -54,6 +54,17 @@ for i in $(seq 1 31); do curl -s -o /dev/null -w "%{http_code} " localhost:8080/
 curl -si localhost:8080/api/mock/items | grep -iE '^HTTP|x-ratelimit|retry-after'
 ```
 
+The response cache is visible on GET/HEAD responses of routes with a `cache_ttl_seconds` (`X-Cache: HIT|MISS|BYPASS`, `Age`):
+
+```bash
+TOKEN=$(docker compose exec gateway pnpm --silent mint-jwt -- --sub demo --scope catalog:read)
+curl -si -H "Authorization: Bearer $TOKEN" 'localhost:8080/api/catalog/items?page=1' | grep -iE 'x-cache|^age'   # MISS
+curl -si -H "Authorization: Bearer $TOKEN" 'localhost:8080/api/catalog/items?page=1' | grep -iE 'x-cache|^age'   # HIT, Age: n
+curl -si -H "Authorization: Bearer $TOKEN" -H 'Cache-Control: no-cache' 'localhost:8080/api/catalog/items?page=1' | grep -i x-cache   # BYPASS (refreshes)
+ADMIN=$(grep ^ADMIN_TOKEN= .env | cut -d= -f2-)
+curl -s -X POST -H "Authorization: Bearer $ADMIN" localhost:8080/admin/v1/routes/catalog/cache/purge        # {"routeId":"catalog","deletedKeys":n}
+```
+
 Load and chaos scenarios (k6 via Docker, results committed under `docs/results/`):
 
 ```bash
@@ -61,6 +72,9 @@ export JWT_SECRET=$(grep ^JWT_SECRET= .env | cut -d= -f2-)
 docker run --rm -i --add-host=host.docker.internal:host-gateway -v "$PWD/load:/scripts:ro" -v "$PWD/docs/results:/results" \
   -e BASE_URL=http://host.docker.internal:8080 -e JWT_SECRET -e SUMMARY_PATH=/results/ratelimit-k6.txt \
   grafana/k6 run /scripts/ratelimit.js                       # 500 rps x 60 s: 0 x 5xx, 429s within ±2 %, p95 < 25 ms
+docker run --rm -i --add-host=host.docker.internal:host-gateway -v "$PWD/load:/scripts:ro" -v "$PWD/docs/results:/results" \
+  -e BASE_URL=http://host.docker.internal:8080 -e JWT_SECRET -e SUMMARY_PATH=/results/cache-k6.txt \
+  grafana/k6 run /scripts/cache.js                           # 300 rps x 90 s read-heavy: hit ratio >= 60 %, p95 HIT < 5 ms
 ```
 
 If 6379 or 5432 are already used on your machine, set `REDIS_HOST_PORT` / `POSTGRES_HOST_PORT` in `.env`.

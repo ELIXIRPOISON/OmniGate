@@ -110,6 +110,7 @@ packages/shared                  # DTO types shared by gateway + dashboard
 **Options:** Fixed window (simple, 2× burst at boundaries) · Sliding window counter (approximate, cheap) · **Sliding window log** (exact, O(n) memory per key per window) · Token bucket (burst-friendly, more state).
 **Decision:** Sliding window log with ZSET, executed atomically in Lua. Exactness is worth the memory at v1 volumes (max = 1000 entries/key/window). Token bucket documented as v1.1 "burst" policy type.
 **Consequences:** One round trip per request; memory ≈ 100 B × max × active keys. See `05` for the script.
+**Measured (Sprint 3):** 500 rps for 60 s over 20 principals: 30,002 requests, exactly 2,000 accepted, 28,001 rejected vs 28,000 expected, 0 × 5xx, p95 1.32 ms for served requests (`docs/results/ratelimit-k6.txt`). Redis stopped mid-run: 0 × 5xx, fail-open with `X-RateLimit-Degraded`, reconnect ~1 s after restart. The shipped script evaluates several buckets (policy + anonymous cap) in one call and checks the throttle flag first; see `05 §1.2`.
 
 ### ADR-003: LLM classification is asynchronous by default
 **Status:** Accepted
