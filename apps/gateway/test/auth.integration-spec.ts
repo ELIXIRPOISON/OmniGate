@@ -122,8 +122,16 @@ describe('auth + readiness (integration, real Redis + Postgres)', () => {
 
   it('seed created the admin, three policies, two routes and a demo key', async () => {
     expect(await prisma.adminUser.count()).toBe(1);
-    expect(await prisma.rateLimitPolicy.count()).toBe(3);
-    expect(await prisma.route.count()).toBe(2);
+    expect(
+      await prisma.rateLimitPolicy.count({
+        where: { name: { in: ['default', 'strict', 'generous'] } },
+      }),
+    ).toBe(3);
+    expect(
+      await prisma.route.count({
+        where: { service: { in: ['mock', 'orders'] } },
+      }),
+    ).toBe(2);
     expect(seeded.demoKey.raw).toMatch(/^gw_live_[0-9A-Za-z]{32}$/);
     const stored = await prisma.apiKey.findUnique({
       where: { id: seeded.demoKey.id },
