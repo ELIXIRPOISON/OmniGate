@@ -19,6 +19,7 @@ import { configureApp } from '../src/app.setup.js';
 import { ApiKeyService } from '../src/auth/api-key.service.js';
 import { loadEnv } from '../src/config/env.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
+import { RedisService } from '../src/redis/redis.service.js';
 import { seed, type SeedResult } from '../src/prisma/seed.js';
 
 const JWT_SECRET = 'integration-test-secret-32-bytes-long!';
@@ -98,8 +99,13 @@ describe('auth + readiness (integration, real Redis + Postgres)', () => {
       pepper: PEPPER,
       mockUpstreamUrl: `http://127.0.0.1:${up.port}`,
     });
-    // give the lazily-connecting Redis client a moment
-    await new Promise((r) => setTimeout(r, 300));
+    // Suites share one Redis, so start from a clean slate: otherwise an earlier suite's
+    // rate-limit buckets for anon:127.0.0.1 make the anonymous test here a 429.
+    const redis = app.get(RedisService);
+    for (let i = 0; i < 50 && !redis.isReady; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    await redis.client.flushdb();
   });
 
   afterAll(async () => {
@@ -267,7 +273,6 @@ describe('auth + readiness (integration, real Redis + Postgres)', () => {
       .get('/api/secure/x')
       .set('X-API-Key', seeded.demoKey.raw)
       .expect(200);
-    const { RedisService } = await import('../src/redis/redis.service.js');
     const redis = app.get(RedisService);
     const hash = await redis.client.hgetall(`key:${seeded.demoKey.prefix}`);
     expect(hash.id).toBe(seeded.demoKey.id);
