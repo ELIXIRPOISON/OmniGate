@@ -54,6 +54,15 @@ export const envSchema = z
     LLM_MODEL: z.string().min(1).optional(),
     LLM_API_KEY: z.string().min(1).optional(),
     LLM_DAILY_CALL_CAP: int().nonnegative().default(20_000),
+    /** Override for any OpenAI-compatible endpoint (Groq, Together, vLLM, Ollama /v1) or a proxy. */
+    LLM_BASE_URL: z.url().optional(),
+    LLM_MAX_OUTPUT_TOKENS: int().positive().max(4_000).default(200),
+    /** Await budget for routes in sync mode; exceeding it fails open. */
+    LLM_TIMEOUT_SYNC_MS: int().positive().default(800),
+    LLM_TIMEOUT_ASYNC_MS: int().positive().default(5_000),
+    ANOMALY_THROTTLE_EVENTS: int().positive().default(3),
+    ANOMALY_THROTTLE_WINDOW_S: int().positive().default(300),
+    ANOMALY_THROTTLE_SECONDS: int().positive().default(600),
 
     WORKER_INLINE: bool().default(true),
     LOG_RETENTION_DAYS: int().positive().default(30),

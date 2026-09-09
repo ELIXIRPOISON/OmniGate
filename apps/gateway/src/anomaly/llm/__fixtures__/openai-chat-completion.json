@@ -1,0 +1,17 @@
+{
+  "id": "chatcmpl-omnigate-fixture-1",
+  "object": "chat.completion",
+  "created": 1788900000,
+  "model": "gpt-4o-mini",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"score\":0.96,\"verdict\":\"malicious\",\"categories\":[\"sqli\"],\"reasoning\":\"SQL tautology payload in the id parameter delivered by a scanner user agent.\"}"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": { "prompt_tokens": 912, "completion_tokens": 44, "total_tokens": 956 }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "msg_omnigate_fixture_1",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-haiku-4-5-20251001",
+  "content": [
+    {
+      "type": "tool_use",
+      "id": "toolu_omnigate_fixture_1",
+      "name": "record_verdict",
+      "input": {
+        "score": 0.72,
+        "verdict": "suspicious",
+        "categories": ["scraping", "enumeration"],
+        "reasoning": "Several thousand distinct paths in ten minutes from one address with a scripting user agent."
+      }
+    }
+  ],
+  "stop_reason": "tool_use",
+  "usage": { "input_tokens": 940, "output_tokens": 61 }
+}
