@@ -2,7 +2,7 @@
 
 > A self-hosted gateway that fronts your microservices with JWT/API-key auth, Redis-backed rate limiting and caching, LLM-assisted anomaly detection, and a real-time React dashboard.
 
-**Status:** Sprint 4 of 9 (kickoff 7 Sep 2026, v1.0 target 6 Nov 2026). Phase 1 done (routing, proxying, JWT and API-key auth, readiness) and Phase 2 done (Redis sliding-window rate limiting, response cache with purge). AI anomaly detection is next. Nothing is deployed yet.
+**Status:** Sprint 5 of 9 (kickoff 7 Sep 2026, v1.0 target 6 Nov 2026). Phases 1 and 2 done (routing, proxying, auth, readiness, rate limiting, cache); Phase 3 in progress: heuristic anomaly pre-screen and async queue live, LLM classification next. Nothing is deployed yet.
 **Stack:** NestJS 12 (Express) · Redis 7 · PostgreSQL 16 + Prisma · BullMQ · React 19 + Vite · TypeScript 6 · Docker
 
 ## Request lifecycle
@@ -19,6 +19,7 @@ apps/gateway        NestJS gateway + worker (data plane, admin API)
 apps/dashboard      React admin UI
 apps/mock-upstream  Tiny Express service the demo and tests proxy to
 load/               k6 scenarios
+docs/eval/          200-row labelled anomaly evaluation set (generated)
 packages/shared     DTO / contract types shared by both apps
 docs/               PRD, architecture + ADRs, specs, delivery plan, journal
 ```
@@ -63,6 +64,14 @@ curl -si -H "Authorization: Bearer $TOKEN" 'localhost:8080/api/catalog/items?pag
 curl -si -H "Authorization: Bearer $TOKEN" -H 'Cache-Control: no-cache' 'localhost:8080/api/catalog/items?page=1' | grep -i x-cache   # BYPASS (refreshes)
 ADMIN=$(grep ^ADMIN_TOKEN= .env | cut -d= -f2-)
 curl -s -X POST -H "Authorization: Bearer $ADMIN" localhost:8080/admin/v1/routes/catalog/cache/purge        # {"routeId":"catalog","deletedKeys":n}
+```
+
+Every request is scored inline by eight heuristics (sub-millisecond) and suspicious ones are queued for the LLM stage. In development the score is exposed as a header:
+
+```bash
+curl -si "localhost:8080/api/mock/items?id=1'%20OR%201=1--" | grep -i x-anomaly    # X-Anomaly-Score: 0.901, injection_patterns=1.00, queued: gate
+curl -si "localhost:8080/api/mock/items?page=2" | grep -i x-anomaly              # X-Anomaly-Score: 0.01x
+docker compose exec redis redis-cli --scan --pattern 'bull:anomaly:*'            # the queued jobs
 ```
 
 Load and chaos scenarios (k6 via Docker, results committed under `docs/results/`):

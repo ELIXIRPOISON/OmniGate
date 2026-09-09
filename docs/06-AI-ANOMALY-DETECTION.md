@@ -41,6 +41,16 @@ Weighted signals, each 0–1, combined as `1 - Π(1 - wᵢ·sᵢ)` (noisy-OR) so
 
 Thresholds live in `anomaly.config.ts`; every signal is unit-tested with positive and negative fixtures.
 
+### 4.1 Implementation notes (Sprint 5)
+- Lives in `apps/gateway/src/anomaly/`: `redactor.ts`, `heuristics.ts` (pure, benchmarkable), `stats.service.ts` (Redis counters), `anomaly.interceptor.ts` (pre-screen), `queue/` (BullMQ producer, inline worker, processor).
+- The pre-screen is a Nest interceptor after the cache, so cached responses skip it and the body is read exactly once: buffered up to `MAX_BODY_BYTES` (400 problem beyond), screened, then replayed by the proxy with an explicit `Content-Length` (docs/08 risk R4 mitigation; chunked uploads become fixed-length upstream).
+- Behavioural signals come from one Redis pipeline per request: `burst` from the rate-limit sorted set (`ZCOUNT` last 10 s ÷ policy max), `path_enum` from per-minute HyperLogLogs, `auth_failures` from per-IP minute counters fed by the AuthGuard when presented credentials are rejected, `body_size_z` from per-route running sums. Redis down → those signals read 0 and only the CPU signals remain.
+- Redis keys: `astat:route:{service}` (HASH n/sum/sumsq, 24 h), `astat:paths:{principal}:{minute}` (HLL, 11 min), `astat:authfail:{ip}:{minute}` (2 min), `astat:p:{principal}:{minute}` (HASH requests/errors, 11 min). `principalStats10m` sums the last ten minute buckets and is only computed for queued requests.
+- Ramps instead of hard cut-offs: `path_enum` 0 at ≤20 distinct paths → 1 at ≥50, `auth_failures` 0 at ≤3 → 1 at ≥10, `entropy` 0 at ≤4.6 bits/char → 1 at ≥5.2 (text bodies ≥64 bytes), `body_size_z` 0 at z≤2 → 1 at z≥6 once the route has ≥20 samples. `ua_anomaly`: scanner 1.0, missing 0.6. The "python-requests on browser routes" sub-rule needs a route flag we do not have yet and is deferred.
+- Dev headers when `EXPOSE_ANOMALY_SCORE=true`: `X-Anomaly-Score`, `X-Anomaly-Signals` (top non-zero signals) and `X-Anomaly-Queued` (`gate|sample|sync|dropped`). `anomaly_score` joins the request log line.
+- **Micro-benchmark** (`heuristics.spec.ts`, 10,000 synthetic requests, Apple Silicon laptop): p50=0.0015 ms p99=0.0087 ms — comfortably inside the 0.5 ms budget. CI asserts a looser 2 ms because shared runners are noisy.
+- Sync routes are queued with reason `sync` for now; the awaited verdict and 403 arrive with S6-04.
+
 ## 5. [C] Feature envelope sent to the LLM
 ```json
 {
@@ -118,6 +128,8 @@ Calibration: benign ≤ 0.3, suspicious 0.3–0.7, malicious ≥ 0.7.
 2. **Harness** (`pnpm eval:anomaly`): runs heuristics-only, LLM-only, and combined; prints confusion matrix, precision, recall, F1, mean latency, and cost per 1k.
 3. **Targets:** combined precision ≥ 0.85, recall ≥ 0.80 at threshold 0.7. Tune the heuristic gate (0.4) and block threshold (0.9) with a threshold sweep; commit the curve to `/docs/results/`.
 4. **Feedback loop:** dashboard "review" labels append to the eval set (`PATCH /anomalies/:id/review`).
+
+**Dataset v1 (Sprint 5):** `docs/eval/anomaly-eval.jsonl`, 200 rows generated deterministically by `pnpm --filter @omnigate/gateway eval:generate` (`apps/gateway/src/eval/generate-dataset.ts`): 80 benign (browsing, unicode/apostrophe writes, long bulk JSON, a bursty trusted integration, dotted asset paths) and 120 malicious (40 injection across SQLi/XSS/traversal/command/SSTI in raw, URL-encoded and double-encoded forms; 30 scraping/enumeration; 25 credential stuffing; 25 scanner signatures). Heuristics alone at threshold 0.7: precision 1.000, recall 0.900, F1 0.947 (108 TP, 0 FP, 12 FN). The misses are the behavioural rows whose stats sit just under the ramps; the LLM stage in Sprint 6 is expected to lift recall.
 
 ## 9. Cost model (fill in Sprint 6 with real numbers)
 ```

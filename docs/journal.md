@@ -2,6 +2,13 @@
 
 Five lines a day: done / blocked / decided. Newest first.
 
+## 2026-09-09 (Wed) - Sprint 5
+- Done: S5-01 redactor (headers, sensitive JSON keys, emails, card/phone runs, truncation, never throws). S5-02 heuristic scorer: 8 signals, noisy-OR, per-signal fixtures, p50=0.0015 ms p99=0.0087 ms on 10k synthetic requests. S5-03 Redis stats (burst from the rate-limit ZSET, HyperLogLog distinct paths, per-IP auth failures fed by the AuthGuard, per-route body-size sums, 10-minute principal stats) in one pipeline per request. S5-04 BullMQ `anomaly` queue + inline worker (WORKER_INLINE), job payload = redacted envelope, drop-with-warning when Redis is down. S5-05 200-row eval set + deterministic generator; heuristics-only P 1.000 / R 0.900.
+- Decided: the pre-screen buffers bodies up to MAX_BODY_BYTES and the proxy replays them with an explicit Content-Length (risk R4 handled; chunked uploads arrive fixed-length upstream).
+- Decided: dev-only headers X-Anomaly-Score / X-Anomaly-Signals / X-Anomaly-Queued make the pipeline observable from curl; sync routes are queued with reason=sync until S6-04 adds the awaited verdict.
+- Exit demo passes: `' OR 1=1` scores 0.90 and is queued, a normal call scores 0.01, jobs visible under bull:anomaly:* and processed by the inline worker.
+- Next: Sprint 6 - LlmProvider + OpenAI/Anthropic/fake adapters with recorded fixtures, circuit breaker + daily cap + dedup, persist anomaly_events, enforcement modes (sync 403, auto-throttle), eval harness with threshold sweep.
+
 ## 2026-09-08 (Tue, night) - Sprint 4
 - Done: S4-01 CacheInterceptor (eligibility from 05 §2.1, HIT/MISS/BYPASS, Age, bodies ≤ CACHE_MAX_BODY_BYTES teed off the streamed response). S4-02 key = sha1(method|path|sortedQuery|principal|accept), vary on authenticated principal by default, anonymous callers share, per-route `cache_vary_on_principal`. S4-03 stampede lock (SET NX PX 2000 + 200 ms wait): 50 concurrent misses -> 1 upstream call. S4-04 `POST /admin/v1/routes/:id/cache/purge` behind a static ADMIN_TOKEN guard (Sprint 7 replaces it). S4-05 k6 cache scenario: 27,002 req, 99.75 % hit ratio, p95 HIT 1.87 ms, 0 x 5xx. S4-06 `cache_status` joins `rate_limited` and `upstream_ms` in the log line. S4-07 docs: ADR-002 numbers, 05 §2 notes, env table, README.
 - Decided: RL_COUNT_CACHE_HITS=false is honoured inside the limiter's Lua call (cache key passed as an extra KEY), so a hit is free without a second round trip.
