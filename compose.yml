@@ -52,6 +52,12 @@ services:
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-only-admin-token-change-me}
       LLM_PROVIDER: ${LLM_PROVIDER:-fake}
       LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      # host.docker.internal reaches a model server running on the host (e.g. Ollama).
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      ANOMALY_AUTO_THROTTLE: ${ANOMALY_AUTO_THROTTLE:-false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       mock-upstream:
         condition: service_started

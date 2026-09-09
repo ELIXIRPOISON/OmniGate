@@ -13,10 +13,14 @@ import { pathOf, type GatewayRequest } from '../common/gateway-request.js';
 import { Problems } from '../common/problem/problem.js';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
+import type { RouteConfig } from '../config/routes.js';
 import { rateLimitKey, resolvePolicy } from '../rate-limit/policy.js';
 import { BodyTooLargeError, hasBody, readRawBody } from './body.js';
 import type { AnomalyJobData, FeatureEnvelope } from './envelope.js';
+import { AnomalyEventsService } from './events.service.js';
 import { type HeuristicResult, scoreHeuristics } from './heuristics.js';
+import type { Classification } from './llm/llm.service.js';
+import { LlmService } from './llm/llm.service.js';
 import { AnomalyQueue } from './queue/anomaly.queue.js';
 import {
   isTextContentType,
@@ -26,18 +30,24 @@ import {
 } from './redactor.js';
 import { AnomalyStatsService } from './stats.service.js';
 
+/** Heuristic score above which an unambiguous injection may be blocked without the model. */
+export const HEURISTIC_FAST_BLOCK_SCORE = 0.95;
+
 export interface AnomalyVerdictOnRequest {
   heuristic: HeuristicResult;
   envelope?: FeatureEnvelope;
   queued: boolean;
   reason?: AnomalyJobData['reason'];
+  /** Present on sync routes, where the verdict is awaited inline. */
+  classification?: Classification;
+  blocked?: boolean;
 }
 
 /**
- * Step 6 of the lifecycle (docs/02 §3, docs/06 §2): buffer the body (bounded), redact, score with the
- * heuristics inline, expose X-Anomaly-Score in dev, and queue the feature envelope for the LLM when the
- * score crosses the gate, the request is sampled, or the route is in sync mode. Sync enforcement itself
- * (await + 403) lands in Sprint 6; until then sync routes are queued like async ones.
+ * Step 6 of the lifecycle (docs/02 section 3, docs/06 section 2): buffer the body (bounded), redact,
+ * score with the heuristics inline, expose X-Anomaly-Score in dev, then either queue the envelope for
+ * asynchronous classification or - on a route that opted into sync mode - await the verdict within a
+ * hard budget and answer 403 when it is above the block threshold. Any model trouble fails open.
  */
 @Injectable()
 export class AnomalyInterceptor implements NestInterceptor {
@@ -45,6 +55,8 @@ export class AnomalyInterceptor implements NestInterceptor {
     @Inject(ENV) private readonly env: Env,
     private readonly stats: AnomalyStatsService,
     private readonly queue: AnomalyQueue,
+    private readonly llm: LlmService,
+    private readonly events: AnomalyEventsService,
     private readonly logger: PinoLogger,
   ) {
     this.logger.setContext(AnomalyInterceptor.name);
@@ -124,7 +136,51 @@ export class AnomalyInterceptor implements NestInterceptor {
       if (res.statusCode >= 400) this.stats.recordError(who);
     });
 
-    // 4. Gate: high score, random sample, or sync route -> build the envelope and queue it.
+    const buildEnvelope = async (): Promise<FeatureEnvelope> => ({
+      requestId: String(req.id),
+      route: route.service,
+      method: req.method,
+      path,
+      principal: who,
+      clientCountry: null,
+      userAgent: userAgent ?? null,
+      querySample: redactQuery(query),
+      bodySample: redactBody(body, contentType),
+      heuristics: {
+        score: heuristic.score,
+        signals: heuristic.signals,
+        categories: heuristic.categories,
+        matchedPatterns: heuristic.matchedPatterns,
+      },
+      principalStats10m: await this.stats.principalStats10m(who),
+    });
+
+    // 4. Fast path: an unmistakable payload on a route that opted in is blocked without the model.
+    if (this.shouldFastBlock(route, heuristic)) {
+      const envelope = await buildEnvelope();
+      const classification: Classification = {
+        verdict: null,
+        source: 'skipped',
+        detail: 'heuristic_fast_block',
+        latencyMs: null,
+        model: this.llm.model,
+      };
+      req.anomaly = {
+        heuristic,
+        envelope,
+        queued: false,
+        blocked: true,
+        classification,
+      };
+      await this.events.record(envelope, classification, {
+        blocked: true,
+        clientIp,
+      });
+      this.markBlocked(res, 'heuristic');
+      throw Problems.forbidden('Request blocked by anomaly policy');
+    }
+
+    // 5. Gate: high score, random sample, or a sync route.
     const reason: AnomalyJobData['reason'] | undefined =
       heuristic.score >= this.env.ANOMALY_GATE_THRESHOLD
         ? 'gate'
@@ -140,36 +196,101 @@ export class AnomalyInterceptor implements NestInterceptor {
       reason,
     };
     if (reason) {
-      const principalStats10m = await this.stats.principalStats10m(who);
-      const envelope: FeatureEnvelope = {
-        requestId: String(req.id),
-        route: route.service,
-        method: req.method,
-        path,
-        principal: who,
-        clientCountry: null,
-        userAgent: userAgent ?? null,
-        querySample: redactQuery(query),
-        bodySample: redactBody(body, contentType),
-        heuristics: {
-          score: heuristic.score,
-          signals: heuristic.signals,
-          categories: heuristic.categories,
-          matchedPatterns: heuristic.matchedPatterns,
-        },
-        principalStats10m,
-      };
+      const envelope = await buildEnvelope();
       verdict.envelope = envelope;
-      const jobId = await this.queue.enqueue({
-        envelope,
-        reason,
-        enqueuedAt: Date.now(),
-      });
-      verdict.queued = jobId !== undefined;
-      if (this.env.EXPOSE_ANOMALY_SCORE)
-        res.setHeader('X-Anomaly-Queued', verdict.queued ? reason : 'dropped');
+
+      if (route.anomaly_mode === 'sync') {
+        await this.enforceSync(envelope, verdict, res, clientIp);
+      } else {
+        const jobId = await this.queue.enqueue({
+          envelope,
+          reason,
+          enqueuedAt: Date.now(),
+        });
+        verdict.queued = jobId !== undefined;
+        if (this.env.EXPOSE_ANOMALY_SCORE) {
+          res.setHeader(
+            'X-Anomaly-Queued',
+            verdict.queued ? reason : 'dropped',
+          );
+        }
+      }
     }
     req.anomaly = verdict;
     return next.handle();
+  }
+
+  private shouldFastBlock(
+    route: RouteConfig,
+    heuristic: HeuristicResult,
+  ): boolean {
+    return (
+      route.block_on_heuristic &&
+      heuristic.signals.injection_patterns >= 1 &&
+      heuristic.score >= HEURISTIC_FAST_BLOCK_SCORE
+    );
+  }
+
+  /**
+   * Sync mode (docs/06 section 7): await the verdict within LLM_TIMEOUT_SYNC_MS. A score at or above
+   * ANOMALY_BLOCK_THRESHOLD answers 403; a timeout, an error or a skipped call allows the request.
+   */
+  private async enforceSync(
+    envelope: FeatureEnvelope,
+    verdict: AnomalyVerdictOnRequest,
+    res: Response,
+    clientIp: string,
+  ): Promise<void> {
+    const classification = await this.llm.classify(
+      envelope,
+      this.env.LLM_TIMEOUT_SYNC_MS,
+    );
+    verdict.classification = classification;
+    const score = classification.verdict?.score;
+
+    if (score !== undefined && score >= this.env.ANOMALY_BLOCK_THRESHOLD) {
+      verdict.blocked = true;
+      await this.events.record(envelope, classification, {
+        blocked: true,
+        clientIp,
+      });
+      this.markBlocked(res, 'llm');
+      this.logger.warn(
+        {
+          request_id: envelope.requestId,
+          principal: envelope.principal,
+          route: envelope.route,
+          llm_score: score,
+          categories: classification.verdict?.categories,
+        },
+        'request blocked by anomaly policy',
+      );
+      throw Problems.forbidden('Request blocked by anomaly policy');
+    }
+
+    // Allowed: store the event off the request path so sync mode only pays for the model call.
+    void this.events
+      .record(envelope, classification, { blocked: false, clientIp })
+      .catch((err: unknown) =>
+        this.logger.warn(
+          { err_message: (err as Error).message },
+          'failed to record anomaly event',
+        ),
+      );
+    if (this.env.EXPOSE_ANOMALY_SCORE) {
+      res.setHeader('X-Anomaly-Queued', 'sync');
+      if (score !== undefined)
+        res.setHeader('X-Anomaly-Llm-Score', score.toFixed(3));
+      else if (classification.source !== 'llm')
+        res.setHeader(
+          'X-Anomaly-Llm',
+          `failed-open:${classification.detail ?? classification.source}`,
+        );
+    }
+  }
+
+  private markBlocked(res: Response, by: 'heuristic' | 'llm'): void {
+    res.locals.anomaly_blocked = true;
+    if (this.env.EXPOSE_ANOMALY_SCORE) res.setHeader('X-Anomaly-Blocked', by);
   }
 }

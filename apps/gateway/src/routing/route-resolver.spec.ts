@@ -10,6 +10,7 @@ const route = (over: Partial<RouteConfig> = {}): RouteConfig => ({
   scopes: [],
   cache_ttl_seconds: 0,
   anomaly_mode: 'async',
+  block_on_heuristic: false,
   timeout_ms: 30_000,
   enabled: true,
   ...over,

@@ -29,6 +29,8 @@ export const routeSchema = z.object({
   /** Include the authenticated principal in the cache key. Defaults to CACHE_DEFAULT_VARY_ON_PRINCIPAL. */
   cache_vary_on_principal: z.boolean().optional(),
   anomaly_mode: z.enum(['off', 'async', 'sync']).default('async'),
+  /** Block obvious injection payloads on the heuristic score alone, without waiting for the LLM. */
+  block_on_heuristic: z.boolean().default(false),
   timeout_ms: z.number().int().positive().optional(),
   enabled: z.boolean().default(true),
 });
