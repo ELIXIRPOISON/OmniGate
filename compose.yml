@@ -1,3 +1,7 @@
+# DEVELOPMENT ONLY. The credentials below are throwaway placeholders that are deliberately
+# committed so `docker compose up` works on a fresh clone. Never deploy this file: the production
+# stack (Sprint 9) requires real secrets supplied by the platform, never defaults.
+#
 # Local development stack (docs/08 S1-08, docs/10 §2): gateway with hot reload, mock upstream,
 # Redis and Postgres. `docker compose up`, then seed once with
 # `docker compose exec gateway pnpm --filter @omnigate/gateway seed` and follow the printed curl.
