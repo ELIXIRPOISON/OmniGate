@@ -52,5 +52,18 @@ jobs:
           if-no-files-found: ignore
       - run: pnpm --filter @omnigate/gateway test:e2e
       - name: "Integration (Testcontainers: Redis 7 + Postgres 16)"
-        run: pnpm --filter @omnigate/gateway test:integration
+        id: integration
+        run: |
+          set -o pipefail
+          pnpm --filter @omnigate/gateway test:integration 2>&1 | tee integration.log
+
+      - name: Publish the integration failure to the job summary
+        if: failure() && steps.integration.outcome == 'failure'
+        run: |
+          {
+            echo '### Integration suite failed'
+            echo '```'
+            tail -n 120 integration.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - run: pnpm -r build

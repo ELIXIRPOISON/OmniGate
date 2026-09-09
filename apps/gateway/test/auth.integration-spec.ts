@@ -13,6 +13,7 @@ import { Test } from '@nestjs/testing';
 import { SignJWT } from 'jose';
 import request from 'supertest';
 import { inject } from 'vitest';
+import { applyTestEnv } from './setup/env.js';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/app.setup.js';
 import { ApiKeyService } from '../src/auth/api-key.service.js';
@@ -66,7 +67,7 @@ describe('auth + readiness (integration, real Redis + Postgres)', () => {
       ].join('\n'),
     );
 
-    Object.assign(process.env, {
+    applyTestEnv({
       NODE_ENV: 'test',
       LOG_LEVEL: 'silent',
       ROUTES_FILE: routesFile,

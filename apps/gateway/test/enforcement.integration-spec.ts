@@ -7,6 +7,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { inject } from 'vitest';
+import { applyTestEnv } from './setup/env.js';
 import { LLM_PROVIDER_TOKEN } from '../src/anomaly/llm/llm.factory.js';
 import {
   LlmError,
@@ -53,7 +54,7 @@ const scriptedProvider: LlmProvider = {
 const SQLI = "?id=1' OR 1=1--";
 
 async function bootApp(routesFile: string, extra: Record<string, string>) {
-  Object.assign(process.env, {
+  applyTestEnv({
     NODE_ENV: 'test',
     LOG_LEVEL: 'silent',
     ROUTES_FILE: routesFile,

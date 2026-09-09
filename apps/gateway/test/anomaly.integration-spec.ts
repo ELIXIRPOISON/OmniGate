@@ -14,6 +14,7 @@ import { Test } from '@nestjs/testing';
 import { SignJWT } from 'jose';
 import request from 'supertest';
 import { inject } from 'vitest';
+import { applyTestEnv } from './setup/env.js';
 import { AnomalyQueue } from '../src/anomaly/queue/anomaly.queue.js';
 import { AnomalyWorker } from '../src/anomaly/queue/anomaly.worker.js';
 import { AppModule } from '../src/app.module.js';
@@ -89,7 +90,7 @@ describe('anomaly pre-screen + queue (integration, real Redis)', () => {
       ].join('\n'),
     );
 
-    Object.assign(process.env, {
+    applyTestEnv({
       NODE_ENV: 'test',
       LOG_LEVEL: 'silent',
       ROUTES_FILE: routesFile,

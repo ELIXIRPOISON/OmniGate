@@ -11,6 +11,7 @@ import {
 } from '@testcontainers/redis';
 import request from 'supertest';
 import { inject } from 'vitest';
+import { applyTestEnv } from './setup/env.js';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/app.setup.js';
 import { loadEnv } from '../src/config/env.js';
@@ -55,7 +56,7 @@ describe('chaos: Redis outage (integration)', () => {
       `routes:\n  - { service: open, upstream: "http://127.0.0.1:${port}", auth_required: false }\n`,
     );
 
-    Object.assign(process.env, {
+    applyTestEnv({
       NODE_ENV: 'test',
       LOG_LEVEL: 'silent',
       ROUTES_FILE: routesFile,

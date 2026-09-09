@@ -8,6 +8,7 @@ import { Test } from '@nestjs/testing';
 import { SignJWT } from 'jose';
 import request from 'supertest';
 import { inject } from 'vitest';
+import { applyTestEnv } from './setup/env.js';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/app.setup.js';
 import { generateApiKey } from '../src/auth/api-key.js';
@@ -56,7 +57,7 @@ describe('rate limiting (integration, real Redis)', () => {
       ].join('\n'),
     );
 
-    Object.assign(process.env, {
+    applyTestEnv({
       NODE_ENV: 'test',
       LOG_LEVEL: 'silent',
       ROUTES_FILE: routesFile,
