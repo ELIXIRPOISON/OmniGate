@@ -74,6 +74,35 @@ curl -si "localhost:8080/api/mock/items?page=2" | grep -i x-anomaly             
 docker compose exec redis redis-cli --scan --pattern 'bull:anomaly:*'            # the queued jobs
 ```
 
+Suspicious requests are then classified off the hot path by a pluggable model backend. A route can opt
+into synchronous screening, where the verdict is awaited briefly and a high score is refused:
+
+```bash
+curl -si -H "X-API-Key: $KEY" "localhost:8080/api/orders/items?id=1'%20OR%201=1--"   # 403 problem+json
+```
+
+### Choosing a model backend
+
+`LLM_PROVIDER` selects the adapter. The default, `fake`, is a deterministic stub that needs no account,
+no network and no cost.
+
+| `LLM_PROVIDER` | Backend | Notes |
+|---|---|---|
+| `fake` | none | Deterministic rule stub for tests, CI and offline development |
+| `local` | Any OpenAI-compatible server you run | Defaults to Ollama on `http://localhost:11434/v1`; nothing leaves your machine |
+| `openai` | OpenAI, or any compatible endpoint | Set `LLM_BASE_URL` for Groq, Together, Mistral, DeepSeek or vLLM |
+| `anthropic` | Anthropic Messages API | Forced tool call for structured output |
+
+Only the redacted feature envelope is ever sent: masked query and body samples, heuristic signals and
+short-term sender statistics. Any backend can be scored against the labelled dataset:
+
+```bash
+pnpm --filter @omnigate/gateway eval:anomaly -- --provider fake
+pnpm --filter @omnigate/gateway eval:anomaly -- --provider local --model qwen2.5:7b
+```
+
+Results and the threshold sweep live in [`docs/results/anomaly-eval.md`](docs/results/anomaly-eval.md).
+
 Load and chaos scenarios (k6 via Docker, results committed under `docs/results/`):
 
 ```bash

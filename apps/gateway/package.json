@@ -28,7 +28,8 @@
     "seed": "node dist/prisma/seed.js",
     "mint-jwt": "node dist/cli/mint-jwt.js",
     "test:integration": "vitest run --config ./vitest.config.integration.ts",
-    "eval:generate": "node dist/eval/generate-dataset.js"
+    "eval:generate": "node dist/eval/generate-dataset.js",
+    "eval:anomaly": "node dist/eval/eval-anomaly.js"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",

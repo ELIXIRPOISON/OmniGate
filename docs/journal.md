@@ -2,6 +2,14 @@
 
 Five lines a day: done / blocked / decided. Newest first.
 
+## 2026-09-09 (Wed, later) - Sprint 6
+- Done: S6-01 `LlmProvider` behind a DI token with OpenAI-compatible, Anthropic (forced tool call) and deterministic fake adapters; zod-validated verdicts, one retry on malformed output, recorded fixtures so CI never touches the network. S6-02 guardrails in Redis: 10-minute dedup, daily call cap counted before the call, circuit breaker opening after five consecutive failures for 60 s. S6-03 `anomaly_events` persistence with redacted samples, both scores, categories, model id and latency. S6-04 enforcement: async writes events and trips `throttle:{principal}` (honoured by the RateLimitGuard), opt-in sync awaits the verdict within 800 ms and answers 403, `block_on_heuristic` blocks obvious payloads without a model call, everything fails open. S6-05 eval harness with the three-way comparison and a threshold sweep CSV. S6-06 results doc.
+- Decided: `LLM_BASE_URL` lets the OpenAI adapter serve Groq, Together, vLLM and Ollama, so provider-agnostic means one adapter rather than one class per vendor.
+- Decided: the eval ran on the `fake` stub because the project has no paid model account. The results doc states plainly that this demonstrates the pipeline, not model quality, and documents how to rerun against a local or free-tier model.
+- Numbers: heuristics only P 1.000 / R 0.900; with the classification stage P 1.000 / R 0.942 at threshold 0.7. Cost model ~25,000 calls per 1M requests, capped at 20,000/day.
+- Milestone M3 (Anomaly Guard) reached on 9 Sep; target was 16 Oct.
+- Next: Sprint 7 - audit_logs partitioned table and batch writer, admin login with JWT, CRUD for keys/routes/policies, metrics and anomaly review endpoints.
+
 ## 2026-09-09 (Wed) - Sprint 5
 - Done: S5-01 redactor (headers, sensitive JSON keys, emails, card/phone runs, truncation, never throws). S5-02 heuristic scorer: 8 signals, noisy-OR, per-signal fixtures, p50=0.0015 ms p99=0.0087 ms on 10k synthetic requests. S5-03 Redis stats (burst from the rate-limit ZSET, HyperLogLog distinct paths, per-IP auth failures fed by the AuthGuard, per-route body-size sums, 10-minute principal stats) in one pipeline per request. S5-04 BullMQ `anomaly` queue + inline worker (WORKER_INLINE), job payload = redacted envelope, drop-with-warning when Redis is down. S5-05 200-row eval set + deterministic generator; heuristics-only P 1.000 / R 0.900.
 - Decided: the pre-screen buffers bodies up to MAX_BODY_BYTES and the proxy replays them with an explicit Content-Length (risk R4 handled; chunked uploads arrive fixed-length upstream).

@@ -112,13 +112,28 @@ Calibration: benign ≤ 0.3, suspicious 0.3–0.7, malicious ≥ 0.7.
 | Cost cap | `LLM_DAILY_CALL_CAP` (default 20,000); counter in Redis `llm:calls:{yyyymmdd}`; beyond cap → heuristic-only |
 | Dedup | same `(principal, sha1(path+bodySample))` within 10 min → reuse cached verdict (`llm:verdict:{hash}`) |
 
+### 6.4 Implementation notes (Sprint 6)
+- `LlmProvider` is a one-method interface (`apps/gateway/src/anomaly/llm/provider.ts`) resolved through a DI token, so a backend is one small class and tests inject their own.
+- Adapters: `OpenAiProvider` (chat completions with JSON mode), `AnthropicProvider` (forced `record_verdict` tool call, the reliable structured-output mode there), and `FakeProvider` (deterministic rule stub for CI and offline work). `LLM_PROVIDER=local` reuses the OpenAI adapter with `LLM_BASE_URL` defaulting to Ollama on `http://localhost:11434/v1`.
+- Because chat completions is a de-facto standard, `LLM_BASE_URL` points the same adapter at Groq, Together, Mistral, DeepSeek, vLLM or any compatible proxy with no code change.
+- Every verdict is validated with zod before use: scores clamped to 0..1, unknown categories dropped, reasoning truncated to 240 characters. Malformed output is retried once, then the request keeps its heuristic score. Timeouts and HTTP errors are not retried.
+- `LlmService` never throws. It returns a `Classification` with `source` = `llm | dedup | skipped | error`, so callers always have something to record.
+- Guardrails live in Redis so replicas agree: `llm:verdict:{sha1}` (10 min dedup), `llm:calls:{yyyymmdd}` (daily cap, counted before the call), `cb:llm:failures` and `cb:llm:open` (five consecutive failures open the breaker for 60 s; the next call after it expires is the half-open probe). Redis down means "allow, uncached".
+- A misconfigured provider (for example `openai` with no key) is deferred rather than fatal: the gateway boots and classification reports `skipped: config`.
+
 ## 7. [E] Enforcement
 | Mode | Action |
 |------|--------|
 | `off` | No scoring, no events |
 | `async` (default) | Store event. If a principal accumulates ≥ `ANOMALY_THROTTLE_EVENTS` (3) events with score ≥ 0.7 in `ANOMALY_THROTTLE_WINDOW_S` (300) → `SET throttle:{principal} 1 EX 600` (only when `ANOMALY_AUTO_THROTTLE=true`) |
 | `sync` | Await verdict; `score ≥ ANOMALY_BLOCK_THRESHOLD` (0.9) → 403 `https://gw/errors/forbidden` with `detail: "Request blocked by anomaly policy"`; timeout/error → allow + log |
-| Any | Heuristic score ≥ 0.95 with `injection_patterns` = 1 on a route with `blockOnHeuristic: true` → 403 without LLM (fast path for obvious payloads) |
+| Any | Heuristic score >= 0.95 with `injection_patterns` = 1 on a route with `block_on_heuristic: true` -> 403 without calling the model (fast path for obvious payloads) |
+
+### 7.1 Implementation notes (Sprint 6)
+- `async` (default): the queue worker classifies, writes `anomaly_events`, then counts the event in `anomaly:hits:{principal}` (sorted set, `ANOMALY_THROTTLE_WINDOW_S`). Reaching `ANOMALY_THROTTLE_EVENTS` entries at score >= 0.7 sets `throttle:{principal}` for `ANOMALY_THROTTLE_SECONDS`, which the RateLimitGuard already honours: the next request gets 429 before any bucket is touched. With `ANOMALY_AUTO_THROTTLE=false` (the default) the decision is logged and not applied.
+- `sync` (opt-in per route): the verdict is awaited for at most `LLM_TIMEOUT_SYNC_MS` (default 800 ms). A score at or above `ANOMALY_BLOCK_THRESHOLD` answers 403 problem+json with `detail: "Request blocked by anomaly policy"`; a timeout, provider error, open breaker or exhausted budget allows the request. Blocked requests store the event before responding; allowed ones store it off the request path so sync mode only pays for the model call.
+- Events record the redacted sample, both scores, the verdict, categories, the model id and the measured latency. Foreign keys to routes and keys that do not exist in the database (yaml routes, fixtures) fall back to null rather than losing the event.
+- Dev headers when `EXPOSE_ANOMALY_SCORE=true`: `X-Anomaly-Llm-Score`, `X-Anomaly-Blocked` (`heuristic|llm`) and `X-Anomaly-Llm: failed-open:<reason>`.
 
 ## 8. Evaluation plan (this is where your ML background shows)
 1. **Dataset** (`/docs/eval/anomaly-eval.jsonl`, 200 rows, built in Sprint 5):
@@ -128,6 +143,8 @@ Calibration: benign ≤ 0.3, suspicious 0.3–0.7, malicious ≥ 0.7.
 2. **Harness** (`pnpm eval:anomaly`): runs heuristics-only, LLM-only, and combined; prints confusion matrix, precision, recall, F1, mean latency, and cost per 1k.
 3. **Targets:** combined precision ≥ 0.85, recall ≥ 0.80 at threshold 0.7. Tune the heuristic gate (0.4) and block threshold (0.9) with a threshold sweep; commit the curve to `/docs/results/`.
 4. **Feedback loop:** dashboard "review" labels append to the eval set (`PATCH /anomalies/:id/review`).
+
+**Results (Sprint 6):** see [`docs/results/anomaly-eval.md`](../results/anomaly-eval.md) and the threshold sweep in [`docs/results/anomaly-threshold-sweep.csv`](../results/anomaly-threshold-sweep.csv). Heuristics only: precision 1.000, recall 0.900. With the classification stage: precision 1.000, recall 0.942. That run used the deterministic `fake` provider because this project has no paid model account, so it demonstrates the pipeline rather than model quality; the harness takes `--provider local` or any OpenAI-compatible `--base-url` to produce real numbers.
 
 **Dataset v1 (Sprint 5):** `docs/eval/anomaly-eval.jsonl`, 200 rows generated deterministically by `pnpm --filter @omnigate/gateway eval:generate` (`apps/gateway/src/eval/generate-dataset.ts`): 80 benign (browsing, unicode/apostrophe writes, long bulk JSON, a bursty trusted integration, dotted asset paths) and 120 malicious (40 injection across SQLi/XSS/traversal/command/SSTI in raw, URL-encoded and double-encoded forms; 30 scraping/enumeration; 25 credential stuffing; 25 scanner signatures). Heuristics alone at threshold 0.7: precision 1.000, recall 0.900, F1 0.947 (108 TP, 0 FP, 12 FN). The misses are the behavioural rows whose stats sit just under the ramps; the LLM stage in Sprint 6 is expected to lift recall.
 
