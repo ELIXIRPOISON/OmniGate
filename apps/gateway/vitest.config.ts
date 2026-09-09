@@ -11,7 +11,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text-summary', 'lcov'],
       include: ['src/**/*.ts'],
-      exclude: ['src/generated/**', 'src/**/*.spec.ts', 'src/main.ts', 'src/cli/**', 'src/prisma/seed.ts'],
+      exclude: ['src/generated/**', 'src/**/*.spec.ts', 'src/main.ts', 'src/cli/**', 'src/prisma/seed.ts', 'src/eval/**'],
     },
   },
 });

@@ -63,10 +63,19 @@ export class ProxyService {
         error: (...args: unknown[]) => this.logger.error(format(...args)),
       },
       on: {
-        proxyReq: (proxyReq, _req, res) => {
+        proxyReq: (proxyReq, req, res) => {
           const state = this.state(res);
           state.proxyReq = proxyReq;
-          if (state.timedOut) proxyReq.destroy();
+          if (state.timedOut) {
+            proxyReq.destroy();
+            return;
+          }
+          // The pre-screen consumed the stream; send the exact bytes it buffered (docs/08 R4).
+          if (req.rawBody !== undefined) {
+            proxyReq.removeHeader('transfer-encoding');
+            proxyReq.setHeader('content-length', String(req.rawBody.length));
+            if (req.rawBody.length > 0) proxyReq.write(req.rawBody);
+          }
         },
         proxyRes: (_proxyRes, _req, res) => {
           const state = this.state(res);

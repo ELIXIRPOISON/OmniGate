@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import type { NextFunction, Response } from 'express';
 import type { GatewayRequest } from '../common/gateway-request.js';
+import { AnomalyInterceptor } from '../anomaly/anomaly.interceptor.js';
 import { AuthGuard } from '../auth/auth.guard.js';
 import { CacheInterceptor } from '../cache/cache.interceptor.js';
 import { Problems } from '../common/problem/problem.js';
@@ -22,7 +23,7 @@ import { ProxyService } from './proxy.service.js';
  */
 @Controller('api')
 @UseGuards(AuthGuard, RateLimitGuard)
-@UseInterceptors(CacheInterceptor)
+@UseInterceptors(CacheInterceptor, AnomalyInterceptor)
 export class ProxyController {
   constructor(private readonly proxy: ProxyService) {}
 

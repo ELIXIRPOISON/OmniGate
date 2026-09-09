@@ -2,8 +2,10 @@ import {
   type CanActivate,
   type ExecutionContext,
   Injectable,
+  Optional,
 } from '@nestjs/common';
 import type { Principal } from '@omnigate/shared';
+import { AnomalyStatsService } from '../anomaly/stats.service.js';
 import type { GatewayRequest } from '../common/gateway-request.js';
 import { type ProblemException, Problems } from '../common/problem/problem.js';
 import type { RouteConfig } from '../config/routes.js';
@@ -22,6 +24,7 @@ export class AuthGuard implements CanActivate {
   constructor(
     private readonly jwt: JwtVerifier,
     private readonly apiKeys: ApiKeyService,
+    @Optional() private readonly stats?: AnomalyStatsService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -55,6 +58,16 @@ export class AuthGuard implements CanActivate {
         return this.requireScopes(principal, route);
       }
     } catch (err) {
+      // Presented-but-rejected credentials feed the credential-stuffing signal (docs/06 §4, T2).
+      if (
+        err instanceof AuthError &&
+        err.reason !== 'unavailable' &&
+        err.reason !== 'insufficient_scope'
+      ) {
+        this.stats?.recordAuthFailure(
+          req.ip ?? req.socket.remoteAddress ?? 'unknown',
+        );
+      }
       throw authErrorToProblem(err);
     }
 
