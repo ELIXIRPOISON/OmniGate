@@ -1,0 +1,17 @@
+meta {
+  name: patch-route
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseUrl}}/admin/v1/routes/{{routeId}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "cacheTtlSeconds": 30
+  }
+}

@@ -1,0 +1,19 @@
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+docs {
+  # OmniGate API collection
+
+  Import this folder in Bruno (https://usebruno.com) or run it headless with `bru run`.
+
+  1. Start the stack: `docker compose up -d`
+  2. Seed once: `docker compose exec gateway pnpm seed` and copy the demo API key into `apiKey`
+  3. Run `auth/login` first: it stores `adminToken` for every other request
+
+  Every request under /admin/v1 uses that bearer token; the gateway requests use the API key.
+}

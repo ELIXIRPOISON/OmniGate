@@ -1,0 +1,11 @@
+meta {
+  name: slow-logs
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/admin/v1/logs?minLatencyMs=200&limit=100
+  body: none
+  auth: inherit
+}

@@ -1,0 +1,15 @@
+meta {
+  name: proxy-with-key
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/orders/items
+  body: none
+  auth: none
+}
+
+headers {
+  X-API-Key: {{apiKey}}
+}

@@ -1,0 +1,11 @@
+meta {
+  name: list-anomalies
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/admin/v1/anomalies?minScore=0.7&pageSize=20
+  body: none
+  auth: inherit
+}

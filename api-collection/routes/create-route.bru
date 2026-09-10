@@ -1,0 +1,21 @@
+meta {
+  name: create-route
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/admin/v1/routes
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "service": "demo",
+    "upstream": "http://mock-upstream:3001",
+    "authRequired": false,
+    "cacheTtlSeconds": 15,
+    "anomalyMode": "async"
+  }
+}

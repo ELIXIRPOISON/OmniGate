@@ -1,0 +1,11 @@
+meta {
+  name: breakdown-route
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/admin/v1/metrics/breakdown?by=route&limit=10
+  body: none
+  auth: inherit
+}

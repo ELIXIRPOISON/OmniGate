@@ -133,6 +133,8 @@ describe('proxy (e2e, no data stores)', () => {
       LLM_PROVIDER: 'fake',
       MAX_BODY_BYTES: '1024',
       TRUST_PROXY: 'false',
+      // No Redis or Postgres in this suite, so do not start queue workers or schedulers.
+      WORKER_INLINE: 'false',
     });
 
     const moduleRef = await Test.createTestingModule({

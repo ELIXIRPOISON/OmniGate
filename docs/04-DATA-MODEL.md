@@ -110,6 +110,17 @@ model AnomalyEvent {
 
 ## 3. Audit log — raw SQL migration (ADR-004)
 
+> **Implemented in Sprint 7** as `prisma/migrations/20260910090000_audit_logs`. The shipped migration
+> creates the partitions with a `DO` block covering the previous, current and next two months rather
+> than hardcoded dates, so it works whenever it is first applied. Writes go through an in-memory
+> buffer (50,000 records, drop-oldest) flushed every second or every 500 rows as one `unnest` insert;
+> a batch Postgres rejects twice is discarded rather than blocking every later write. Partition
+> maintenance runs as a nightly BullMQ repeatable job and once at boot.
+>
+> Note that `routes.id` and `api_keys.id` are Prisma uuid *strings* (`text` in Postgres) while
+> `audit_logs.route_id` and `api_key_id` are real `uuid` columns, so joins between them need an
+> explicit cast.
+
 `prisma/migrations/<ts>_audit_logs/migration.sql`:
 
 ```sql

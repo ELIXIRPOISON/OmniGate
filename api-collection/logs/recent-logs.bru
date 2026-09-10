@@ -1,0 +1,11 @@
+meta {
+  name: recent-logs
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/admin/v1/logs?limit=100
+  body: none
+  auth: inherit
+}

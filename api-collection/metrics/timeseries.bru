@@ -1,0 +1,11 @@
+meta {
+  name: timeseries
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/admin/v1/metrics/timeseries?bucket=1m
+  body: none
+  auth: inherit
+}

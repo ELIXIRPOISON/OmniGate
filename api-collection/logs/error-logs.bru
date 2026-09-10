@@ -1,0 +1,11 @@
+meta {
+  name: error-logs
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/admin/v1/logs?statusClass=5xx&limit=100
+  body: none
+  auth: inherit
+}

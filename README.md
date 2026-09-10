@@ -2,12 +2,12 @@
 
 > A self-hosted gateway that fronts your microservices with JWT/API-key auth, Redis-backed rate limiting and caching, LLM-assisted anomaly detection, and a real-time React dashboard.
 
-**Status:** Sprint 5 of 9 (kickoff 7 Sep 2026, v1.0 target 6 Nov 2026). Phases 1 and 2 done (routing, proxying, auth, readiness, rate limiting, cache); Phase 3 in progress: heuristic anomaly pre-screen and async queue live, LLM classification next. Nothing is deployed yet.
+**Status:** Sprint 7 of 9 (kickoff 7 Sep 2026, v1.0 target 6 Nov 2026). The backend is complete: routing, proxying, JWT and API-key auth, rate limiting, response cache, anomaly detection with enforcement, a partitioned audit log and the full admin API. The React dashboard is next. Nothing is deployed yet.
 **Stack:** NestJS 12 (Express) · Redis 7 · PostgreSQL 16 + Prisma · BullMQ · React 19 + Vite · TypeScript 6 · Docker
 
 ## Request lifecycle
 
-`X-Request-Id` → route resolve → auth (JWT | API key) → rate limit (Redis Lua sliding window) → cache (GET) → heuristic anomaly score → proxy → async audit log.
+`X-Request-Id` → route resolve → auth (JWT | API key) → rate limit (Redis Lua sliding window) → cache (GET) → heuristic anomaly score → proxy → buffered audit write.
 LLM classification runs off the hot path by default; routes can opt into synchronous blocking with an 800 ms fail-open timeout.
 
 Full design: [`docs/02-ARCHITECTURE.md`](docs/02-ARCHITECTURE.md). Start with [`docs/00-INDEX.md`](docs/00-INDEX.md).
@@ -20,6 +20,7 @@ apps/dashboard      React admin UI
 apps/mock-upstream  Tiny Express service the demo and tests proxy to
 load/               k6 scenarios
 docs/eval/          200-row labelled anomaly evaluation set (generated)
+api-collection/     Bruno collection for the gateway and admin API
 packages/shared     DTO / contract types shared by both apps
 docs/               PRD, architecture + ADRs, specs, delivery plan, journal
 ```
@@ -62,7 +63,8 @@ TOKEN=$(docker compose exec gateway pnpm --silent mint-jwt -- --sub demo --scope
 curl -si -H "Authorization: Bearer $TOKEN" 'localhost:8080/api/catalog/items?page=1' | grep -iE 'x-cache|^age'   # MISS
 curl -si -H "Authorization: Bearer $TOKEN" 'localhost:8080/api/catalog/items?page=1' | grep -iE 'x-cache|^age'   # HIT, Age: n
 curl -si -H "Authorization: Bearer $TOKEN" -H 'Cache-Control: no-cache' 'localhost:8080/api/catalog/items?page=1' | grep -i x-cache   # BYPASS (refreshes)
-ADMIN=$(grep ^ADMIN_TOKEN= .env | cut -d= -f2-)
+ADMIN=$(curl -s -X POST -H 'content-type: application/json' \
+  -d '{"email":"admin@example.com","password":"admin"}' localhost:8080/admin/v1/auth/login | jq -r .accessToken)
 curl -s -X POST -H "Authorization: Bearer $ADMIN" localhost:8080/admin/v1/routes/catalog/cache/purge        # {"routeId":"catalog","deletedKeys":n}
 ```
 
@@ -102,6 +104,23 @@ pnpm --filter @omnigate/gateway eval:anomaly -- --provider local --model qwen2.5
 ```
 
 Results and the threshold sweep live in [`docs/results/anomaly-eval.md`](docs/results/anomaly-eval.md).
+
+Every proxied request lands in a partitioned audit log, and the control plane exposes it:
+
+```bash
+TOKEN=$(curl -s -X POST -H 'content-type: application/json' \
+  -d '{"email":"admin@example.com","password":"admin"}' localhost:8080/admin/v1/auth/login | jq -r .accessToken)
+
+curl -s -H "Authorization: Bearer $TOKEN" localhost:8080/admin/v1/metrics/overview | jq
+curl -s -H "Authorization: Bearer $TOKEN" 'localhost:8080/admin/v1/metrics/breakdown?by=route' | jq
+curl -s -H "Authorization: Bearer $TOKEN" 'localhost:8080/admin/v1/logs?limit=20' | jq
+curl -s -H "Authorization: Bearer $TOKEN" 'localhost:8080/admin/v1/anomalies?minScore=0.7' | jq
+```
+
+Keys, routes and rate-limit policies are managed the same way, and a route created through the API
+serves traffic immediately. A Bruno collection covering every endpoint is in
+[`api-collection/`](api-collection); metrics query timings over a million rows are in
+[`docs/results/metrics-performance.md`](docs/results/metrics-performance.md).
 
 Load and chaos scenarios (k6 via Docker, results committed under `docs/results/`):
 

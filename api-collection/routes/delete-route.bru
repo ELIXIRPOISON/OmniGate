@@ -1,0 +1,11 @@
+meta {
+  name: delete-route
+  type: http
+  seq: 7
+}
+
+delete {
+  url: {{baseUrl}}/admin/v1/routes/{{routeId}}
+  body: none
+  auth: inherit
+}

@@ -1,0 +1,11 @@
+meta {
+  name: purge-cache
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/admin/v1/routes/{{routeId}}/cache/purge
+  body: none
+  auth: inherit
+}

@@ -1,0 +1,11 @@
+meta {
+  name: rotate-key
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/admin/v1/api-keys/{{keyId}}/rotate
+  body: none
+  auth: inherit
+}

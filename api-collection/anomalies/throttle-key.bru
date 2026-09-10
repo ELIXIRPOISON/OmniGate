@@ -1,0 +1,17 @@
+meta {
+  name: throttle-key
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/admin/v1/anomalies/{{anomalyId}}/throttle-key
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "seconds": 600
+  }
+}

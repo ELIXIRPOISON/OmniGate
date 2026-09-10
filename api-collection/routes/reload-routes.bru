@@ -1,0 +1,11 @@
+meta {
+  name: reload-routes
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/admin/v1/routes/reload
+  body: none
+  auth: inherit
+}

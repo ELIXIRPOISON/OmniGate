@@ -2,6 +2,14 @@
 
 Five lines a day: done / blocked / decided. Newest first.
 
+## 2026-09-10 (Thu) - Sprint 7
+- Done: S7-01 partitioned `audit_logs` raw SQL migration plus nightly BullMQ partition maintenance (create ahead, drop past retention). S7-02 bounded buffer (50k, drop-oldest) flushed every second or 500 rows as one `unnest` insert, with poison-pill protection. S7-03 admin login with bcrypt and a 12 h JWT, replacing the static ADMIN_TOKEN, rate limited 5/min/IP. S7-04 CRUD for keys, routes and policies with zod validation, 409 rules, SSRF guard on upstreams, and live registry reload over Redis pub/sub. S7-05 metrics, logs and anomaly endpoints. Exit demo green: login, create a route through the API and serve it immediately, then a full metrics overview.
+- Decided: audit capture is middleware, not an interceptor, so requests rejected before the controller (unknown service 404s) are still recorded.
+- Decided: routes now come from the database merged over `routes.yaml`; yaml stays the bootstrap set so the gateway works before anything is in the database, and `GET /routes/effective` shows what is actually in force.
+- Found and fixed: the breakdown query missed its 500 ms budget at 580 ms. Measuring in psql showed the join was irrelevant and the per-group `percentile_cont` was the whole cost. Counts and latency are now two statements, with p95 from a deterministic 10 % sample above 200k requests: 87 ms total. Written up in docs/results/metrics-performance.md.
+- Found and fixed: `routes.id` is `text` (Prisma uuid string) while `audit_logs.route_id` is `uuid`, so every join needed an explicit cast.
+- Next: Sprint 8 - the React dashboard: shell and auth flow, overview with spike highlighting, anomalies with a review drawer, keys and routes pages, traffic and logs.
+
 ## 2026-09-09 (Wed, later) - Sprint 6
 - Done: S6-01 `LlmProvider` behind a DI token with OpenAI-compatible, Anthropic (forced tool call) and deterministic fake adapters; zod-validated verdicts, one retry on malformed output, recorded fixtures so CI never touches the network. S6-02 guardrails in Redis: 10-minute dedup, daily call cap counted before the call, circuit breaker opening after five consecutive failures for 60 s. S6-03 `anomaly_events` persistence with redacted samples, both scores, categories, model id and latency. S6-04 enforcement: async writes events and trips `throttle:{principal}` (honoured by the RateLimitGuard), opt-in sync awaits the verdict within 800 ms and answers 403, `block_on_heuristic` blocks obvious payloads without a model call, everything fails open. S6-05 eval harness with the three-way comparison and a threshold sweep CSV. S6-06 results doc.
 - Decided: `LLM_BASE_URL` lets the OpenAI adapter serve Groq, Together, vLLM and Ollama, so provider-agnostic means one adapter rather than one class per vendor.

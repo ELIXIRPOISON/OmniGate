@@ -1,0 +1,11 @@
+meta {
+  name: breakdown-status
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/admin/v1/metrics/breakdown?by=status&limit=10
+  body: none
+  auth: inherit
+}

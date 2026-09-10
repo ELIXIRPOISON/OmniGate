@@ -81,6 +81,20 @@ routes:
 ```
 
 ## 2. Admin API (control plane) — `/admin/v1`
+
+> **Implemented in Sprint 7.** Every endpoint below is live. Authentication is an admin session:
+> `POST /admin/v1/auth/login` returns a 12 h HS256 JWT signed with `ADMIN_JWT_SECRET`, and every
+> other endpoint requires `Authorization: Bearer <that token>`. The temporary `ADMIN_TOKEN` static
+> bearer from Sprint 4 has been removed. Login is rate limited to 5 attempts per IP per minute (T12).
+> Request bodies are validated with zod and rejected as RFC 7807 `400` listing every offending field.
+> A ready-to-run Bruno collection lives in [`api-collection/`](../api-collection).
+>
+> Additions beyond the original sketch:
+> - `GET /routes/effective` shows the routes actually in force, database rows merged over `routes.yaml`.
+> - `GET /metrics/breakdown` returns `sampledLatency`, saying whether p95 came from a sample (see
+>   [`docs/results/metrics-performance.md`](results/metrics-performance.md)).
+> - `POST /routes/:id/cache/purge` accepts a route id or a service name, since yaml routes have no row.
+> - `DELETE /api-keys/:id` is a soft delete (status becomes `revoked`) so audit rows keep resolving.
 All endpoints require `Authorization: Bearer <admin JWT>` except `POST /auth/login`. All list endpoints support `?page=1&pageSize=50` and return `{ items, page, pageSize, total }`.
 
 ### Auth

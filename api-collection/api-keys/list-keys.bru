@@ -1,0 +1,11 @@
+meta {
+  name: list-keys
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/admin/v1/api-keys?page=1&pageSize=50
+  body: none
+  auth: inherit
+}

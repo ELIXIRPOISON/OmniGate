@@ -1,0 +1,18 @@
+meta {
+  name: create-key
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/admin/v1/api-keys
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "demo-key",
+    "scopes": ["orders:read"]
+  }
+}

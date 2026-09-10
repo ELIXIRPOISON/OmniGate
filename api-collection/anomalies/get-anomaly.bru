@@ -1,0 +1,11 @@
+meta {
+  name: get-anomaly
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/admin/v1/anomalies/{{anomalyId}}
+  body: none
+  auth: inherit
+}

@@ -18,9 +18,13 @@ import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/app.setup.js';
 import { loadEnv } from '../src/config/env.js';
 import { RedisService } from '../src/redis/redis.service.js';
+import {
+  adminSession,
+  TEST_ADMIN_EMAIL,
+  TEST_ADMIN_PASSWORD,
+} from './setup/admin.js';
 
 const JWT_SECRET = 'cache-test-secret-that-is-32-bytes-long!';
-const ADMIN_TOKEN = 'cache-test-admin-token-16+';
 
 /** Upstream that counts calls per path and shapes its answer from query flags. */
 function countingUpstream() {
@@ -71,10 +75,9 @@ async function bootApp(routesFile: string, extraEnv: Record<string, string>) {
     REDIS_URL: inject('redisUrl'),
     JWT_SECRET,
     API_KEY_PEPPER: 'cache-pepper-16ch',
-    ADMIN_EMAIL: 'admin@example.com',
-    ADMIN_PASSWORD: 'admin',
+    ADMIN_EMAIL: TEST_ADMIN_EMAIL,
+    ADMIN_PASSWORD: TEST_ADMIN_PASSWORD,
     ADMIN_JWT_SECRET: 'admin-secret-16chars',
-    ADMIN_TOKEN,
     LLM_PROVIDER: 'fake',
     RL_DEFAULT_MAX: '100000',
     RL_ANON_MAX: '100000',
@@ -260,14 +263,15 @@ describe('response cache (integration, real Redis)', () => {
     await http().get('/api/pub/p2').expect(200);
     expect(await redis.client.scard('cache:idx:pub')).toBeGreaterThanOrEqual(2);
 
+    const token = await adminSession(app);
     await http().post('/admin/v1/routes/pub/cache/purge').expect(401);
     await http()
       .post('/admin/v1/routes/pub/cache/purge')
-      .set('Authorization', 'Bearer wrong-token-wrong-token')
+      .set('Authorization', 'Bearer not.a.valid.token')
       .expect(401);
     const purged = await http()
       .post('/admin/v1/routes/pub/cache/purge')
-      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .set('Authorization', `Bearer ${token}`)
       .expect(200);
     expect(purged.body.routeId).toBe('pub');
     expect(purged.body.deletedKeys).toBeGreaterThanOrEqual(2);
@@ -277,7 +281,7 @@ describe('response cache (integration, real Redis)', () => {
     ).toBe('MISS');
     await http()
       .post('/admin/v1/routes/nope/cache/purge')
-      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .set('Authorization', `Bearer ${token}`)
       .expect(404);
   });
 

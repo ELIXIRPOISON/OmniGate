@@ -1,0 +1,17 @@
+meta {
+  name: patch-key
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseUrl}}/admin/v1/api-keys/{{keyId}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "scopes": ["orders:read", "orders:write"]
+  }
+}

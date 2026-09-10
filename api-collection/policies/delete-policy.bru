@@ -1,0 +1,11 @@
+meta {
+  name: delete-policy
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/admin/v1/policies/{{policyId}}
+  body: none
+  auth: inherit
+}
