@@ -29,7 +29,8 @@
     "mint-jwt": "node dist/cli/mint-jwt.js",
     "test:integration": "vitest run --config ./vitest.config.integration.ts",
     "eval:generate": "node dist/eval/generate-dataset.js",
-    "eval:anomaly": "node dist/eval/eval-anomaly.js"
+    "eval:anomaly": "node dist/eval/eval-anomaly.js",
+    "seed:audit": "node dist/cli/seed-audit-logs.js"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
@@ -41,6 +42,7 @@
     "@prisma/client": "^7.10.0",
     "bcrypt": "^6.0.0",
     "bullmq": "^6.3.4",
+    "express": "^5.2.1",
     "http-proxy-middleware": "^4.2.0",
     "ioredis": "^6.0.0",
     "jose": "^6.2.12",
