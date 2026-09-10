@@ -52,6 +52,8 @@ export function typeFor(status: number): string {
       return ProblemType.Forbidden;
     case 404:
       return ProblemType.NotFound;
+    case 409:
+      return ProblemType.Conflict;
     case 429:
       return ProblemType.RateLimited;
     case 502:
@@ -110,6 +112,8 @@ export const Problems = {
         ? `No route registered for service "${service}"`
         : 'Request path must be /api/{service}/...',
     ),
+  notFound: (detail: string) => make(404, ProblemType.NotFound, detail),
+  conflict: (detail: string) => make(409, ProblemType.Conflict, detail),
   rateLimited: (detail: string, retryAfterSeconds: number) =>
     make(429, ProblemType.RateLimited, detail, {
       retryAfter: retryAfterSeconds,

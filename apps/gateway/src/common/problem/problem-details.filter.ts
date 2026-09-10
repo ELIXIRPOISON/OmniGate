@@ -8,6 +8,7 @@ import type { Request, Response } from 'express';
 import { PinoLogger } from 'nestjs-pino';
 import { ProblemType } from '@omnigate/shared';
 import { pathOf } from '../gateway-request.js';
+import { markProblem } from '../../audit/audit.middleware.js';
 import { ensureRequestId } from '../request-id.js';
 import {
   ProblemException,
@@ -89,6 +90,7 @@ export class ProblemDetailsFilter implements ExceptionFilter {
         'request failed with a server error',
       );
     }
+    markProblem(res, problem);
     sendProblem(res, problem, requestId, pathOf(req.originalUrl ?? req.url));
   }
 }

@@ -6,6 +6,8 @@ import {
 import { APP_FILTER } from '@nestjs/core';
 import { AdminModule } from './admin/admin.module.js';
 import { AnomalyStatsModule } from './anomaly/stats.module.js';
+import { AuditMiddleware } from './audit/audit.middleware.js';
+import { AuditModule } from './audit/audit.module.js';
 import { LoggerModule } from './common/logging/logger.module.js';
 import { ProblemDetailsFilter } from './common/problem/problem-details.filter.js';
 import { RequestIdMiddleware } from './common/request-id.middleware.js';
@@ -23,6 +25,7 @@ import { RoutingModule } from './routing/routing.module.js';
     PrismaModule,
     RedisModule,
     AnomalyStatsModule,
+    AuditModule,
     RoutingModule,
     ProxyModule,
     HealthModule,
@@ -33,5 +36,8 @@ import { RoutingModule } from './routing/routing.module.js';
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
     consumer.apply(RequestIdMiddleware).forRoutes('{*path}');
+    // Audit proxied traffic only: health probes and admin calls are not gateway traffic.
+    // One pattern, not two: overlapping patterns would run the middleware twice per request.
+    consumer.apply(AuditMiddleware).forRoutes('api{/*path}');
   }
 }

@@ -20,6 +20,7 @@ export const ProblemType = {
   RouteNotFound: `${PROBLEM_TYPE_BASE}route-not-found`,
   /** Any other unknown path (admin API, health, ...). */
   NotFound: `${PROBLEM_TYPE_BASE}not-found`,
+  Conflict: `${PROBLEM_TYPE_BASE}conflict`,
   RateLimited: `${PROBLEM_TYPE_BASE}rate-limited`,
   BadGateway: `${PROBLEM_TYPE_BASE}bad-gateway`,
   GatewayTimeout: `${PROBLEM_TYPE_BASE}gateway-timeout`,

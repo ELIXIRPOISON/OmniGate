@@ -55,6 +55,8 @@ type ParsedRoute = z.output<typeof routeSchema>;
 /** A route as used at runtime: every default resolved, timeout always present. */
 export type RouteConfig = Omit<ParsedRoute, 'timeout_ms'> & {
   timeout_ms: number;
+  /** Database row id when the route came from the routes table; absent for yaml routes. */
+  id?: string;
 };
 
 export class RoutesValidationError extends Error {
