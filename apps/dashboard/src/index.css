@@ -1,111 +1,143 @@
-:root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+@import 'tailwindcss';
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+/*
+ * OmniGate design tokens.
+ *
+ * The visual language follows the reference component supplied with the brief: zinc neutrals with
+ * almost no chroma, hairline borders expressed as low-alpha ink rather than solid greys, translucent
+ * surface fills, 13px chrome type, 6px radii, and colour reserved for state. Brand colour appears
+ * only on the mark, the active nav item and primary actions.
+ *
+ * Theme is class-based (`.dark` on <html>) because the reference popover detects its own theme with
+ * `closest('.dark')`, and because the dashboard ships a manual toggle rather than following the OS.
+ *
+ * Chart colours are NOT chosen by eye. Every set below was run through the palette validator against
+ * the real surfaces (#ffffff light, #18181b dark) for lightness band, chroma floor, colour-vision
+ * separation and contrast. See docs/07-DASHBOARD-SPEC.md for which set each chart uses and why the
+ * status-class stack was replaced by single-series charts.
+ */
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@custom-variant dark (&:where(.dark, .dark *));
 
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
+@theme {
+  /* ---- brand ------------------------------------------------------------------------------- */
+  /* Violet, deliberately distinct from the blue used for chart series so brand chrome and data
+     never read as the same thing. Swap this one block to match a logo; nothing else depends on it. */
+  --color-brand-50: #f4f2ff;
+  --color-brand-100: #eae5ff;
+  --color-brand-200: #d7ceff;
+  --color-brand-300: #bdaaff;
+  --color-brand-400: #9f7dff;
+  --color-brand-500: #8355fb;
+  --color-brand-600: #6d34e6;
+  --color-brand-700: #5b27c4;
+  --color-brand-800: #4b219f;
+  --color-brand-900: #3e1f80;
+  --color-brand-950: #27114f;
+
+  /* ---- chart series (validated) ------------------------------------------------------------ */
+  /* Categorical slots 1-3. All-pairs validated on both surfaces. */
+  --color-series-1: #2a78d6;
+  --color-series-2: #eb6834;
+  --color-series-3: #1baf7a;
+  /* One-hue ordinal ramp for p50 -> p95, validated as ordinal in both modes. */
+  --color-latency-low: #86b6ef;
+  --color-latency-high: #2a78d6;
+
+  /* ---- status (badges and single-series charts; never a three-fill stack) ------------------ */
+  --color-ok: #0ca30c;
+  --color-warn: #eda100;
+  --color-serious: #ec835a;
+  --color-critical: #d03b3b;
+
+  /* ---- chart chrome ------------------------------------------------------------------------ */
+  --color-grid: #e4e4e7;
+  --color-axis: #a1a1aa;
+
+  /* ---- type -------------------------------------------------------------------------------- */
+  /* 13px is the chrome size used throughout the reference component. */
+  --text-chrome: 0.8125rem;
+  --text-chrome--line-height: 1.35;
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  /* ---- motion ------------------------------------------------------------------------------ */
+  --ease-out-quint: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-@media (prefers-color-scheme: dark) {
+/* Dark steps are selected for the dark surface, not an automatic flip of the light ones. */
+.dark {
+  --color-series-1: #3987e5;
+  --color-series-2: #d95926;
+  --color-series-3: #199e70;
+  --color-latency-low: #6da7ec;
+  --color-latency-high: #256abf;
+  --color-critical: #e66767;
+  --color-warn: #c98500;
+  --color-grid: #27272a;
+  --color-axis: #52525b;
+}
+
+@layer base {
   :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+    color-scheme: light;
+  }
+  .dark {
+    color-scheme: dark;
   }
 
-  #social .button-icon {
-    filter: invert(1) brightness(2);
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
+    font-family: var(--font-sans);
+    /* Chrome type is small; opt out of synthetic bolding that would muddy it. */
+    font-synthesis-weight: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* One focus treatment everywhere, matching the reference component. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-500/70;
+  }
+
+  /* Numbers that sit in columns must align; standalone figures keep proportional digits. */
+  table,
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    @apply bg-brand-500/25;
   }
 }
 
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-}
-
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
-}
-
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
+@layer components {
+  /* The two surface levels the whole UI is built from. Everything else is spacing and type. */
+  .surface {
+    @apply rounded-lg border border-zinc-950/[0.07] bg-white dark:border-white/[0.07] dark:bg-zinc-900;
+  }
+  .surface-muted {
+    @apply rounded-md border border-zinc-950/[0.07] bg-zinc-100/70 dark:border-white/[0.07] dark:bg-white/[0.04];
+  }
+  .hairline {
+    @apply border-zinc-950/[0.07] dark:border-white/[0.07];
   }
 }
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
+
+/* Scrollbars: present, but not part of the composition. */
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-zinc-300) transparent;
   }
-}
-p {
-  margin: 0;
-}
-
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
-}
-
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+  .dark .scrollbar-thin {
+    scrollbar-color: var(--color-zinc-700) transparent;
+  }
 }

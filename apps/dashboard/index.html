@@ -4,7 +4,17 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>dashboard</title>
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="OmniGate control plane: traffic, limits, cache and anomaly detection." />
+    <title>OmniGate</title>
+    <script>
+      // Apply the stored theme before first paint so the page never flashes the wrong background.
+      try {
+        var t = localStorage.getItem('omnigate.theme') || 'system';
+        var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.classList.toggle('dark', dark);
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

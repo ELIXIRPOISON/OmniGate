@@ -19,5 +19,8 @@
     "gen": "pnpm --filter @omnigate/shared build && pnpm --filter @omnigate/gateway prisma:generate",
     "test:integration": "pnpm gen && pnpm --filter @omnigate/gateway test:integration",
     "seed": "pnpm --filter @omnigate/gateway seed"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
   }
 }
