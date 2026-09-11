@@ -344,11 +344,12 @@ export function BarList({
   const max = Math.max(...items.map((i) => i.requests), 1);
   return (
     <ul className="flex flex-col">
-      {items.map((item) => {
+      {items.map((item, index) => {
         const errorRate = item.requests > 0 ? item.errors / item.requests : 0;
         const Row = onSelect ? 'button' : 'div';
         return (
-          <li key={item.key}>
+          // The label is not unique: two API keys may share a name, so position disambiguates.
+          <li key={`${item.key}-${index}`}>
             <Row
               {...(onSelect
                 ? { type: 'button' as const, onClick: () => onSelect(item.key) }
