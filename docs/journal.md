@@ -2,6 +2,15 @@
 
 Five lines a day: done / blocked / decided. Newest first.
 
+## 2026-09-11 (Fri) - Sprint 8, dashboard and design system
+- Done: the dashboard app is real. Tailwind 4 + shadcn layout + path alias set up from the bare Vite scaffold; design tokens derived from the reference filter-token-bar the user supplied; auth context with session restore; app shell with rail, page header, theme toggle and a live readiness pill; Overview, Traffic, Anomalies (with a review drawer), API keys (one-time secret reveal), Routes and a Logs explorer with a request detail sheet. The supplied component is integrated verbatim and drives filtering on Logs and Anomalies.
+- Decided: chart colours were validated, not chosen by eye. The spec's stacked 2xx/4xx/5xx chart was dropped because the status palette fails colour-vision separation as a fill set (good vs critical dE 4.1 deutan) and because a 2xx-dominated stack hides the errors. Three single-purpose charts and a bar list replace it. Written up in docs/13-DESIGN-SYSTEM.md.
+- Found by rendering it: the metrics API only returns buckets that contain data, so charts and sparklines collapsed to a single point. Buckets are now zero-filled client-side across the window, and latency in an empty bucket is a gap rather than a dip to zero.
+- Found by rendering it: six KPI tiles across 1440px made the delta text wrap to three lines. The sparkline now runs full width along the card's bottom edge, and a delta against an empty previous window is suppressed instead of reading "new".
+- Fixed in the supplied component: its ref registration returned an assignment result, which React 19 treats as a cleanup function and TypeScript rejects. One line, now a block body.
+- Blocked: the logo was not on this machine (the path given was empty), so the brand mark is a placeholder and the brand scale is a guess. Both are isolated to two files.
+- Next: Sprint 9 - Dockerfile, deploy, hardening, README and the v1.0 tag.
+
 ## 2026-09-10 (Thu) - Sprint 7
 - Done: S7-01 partitioned `audit_logs` raw SQL migration plus nightly BullMQ partition maintenance (create ahead, drop past retention). S7-02 bounded buffer (50k, drop-oldest) flushed every second or 500 rows as one `unnest` insert, with poison-pill protection. S7-03 admin login with bcrypt and a 12 h JWT, replacing the static ADMIN_TOKEN, rate limited 5/min/IP. S7-04 CRUD for keys, routes and policies with zod validation, 409 rules, SSRF guard on upstreams, and live registry reload over Redis pub/sub. S7-05 metrics, logs and anomaly endpoints. Exit demo green: login, create a route through the API and serve it immediately, then a full metrics overview.
 - Decided: audit capture is middleware, not an interceptor, so requests rejected before the controller (unknown service 404s) are still recorded.

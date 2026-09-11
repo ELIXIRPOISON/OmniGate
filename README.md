@@ -2,7 +2,7 @@
 
 > A self-hosted gateway that fronts your microservices with JWT/API-key auth, Redis-backed rate limiting and caching, LLM-assisted anomaly detection, and a real-time React dashboard.
 
-**Status:** Sprint 7 of 9 (kickoff 7 Sep 2026, v1.0 target 6 Nov 2026). The backend is complete: routing, proxying, JWT and API-key auth, rate limiting, response cache, anomaly detection with enforcement, a partitioned audit log and the full admin API. The React dashboard is next. Nothing is deployed yet.
+**Status:** Sprint 8 of 9 (kickoff 7 Sep 2026, v1.0 target 6 Nov 2026). The backend is complete: routing, proxying, JWT and API-key auth, rate limiting, response cache, anomaly detection with enforcement, a partitioned audit log and the full admin API. The React dashboard is in place: overview, traffic, anomaly review, keys, routes and a log explorer. Nothing is deployed yet.
 **Stack:** NestJS 12 (Express) · Redis 7 · PostgreSQL 16 + Prisma · BullMQ · React 19 + Vite · TypeScript 6 · Docker
 
 ## Request lifecycle
@@ -121,6 +121,15 @@ Keys, routes and rate-limit policies are managed the same way, and a route creat
 serves traffic immediately. A Bruno collection covering every endpoint is in
 [`api-collection/`](api-collection); metrics query timings over a million rows are in
 [`docs/results/metrics-performance.md`](docs/results/metrics-performance.md).
+
+### Dashboard
+
+```bash
+pnpm --filter @omnigate/dashboard dev     # http://localhost:5173, proxies /admin and /api to the gateway
+```
+
+Sign in with `ADMIN_EMAIL` and `ADMIN_PASSWORD`. The design system, its tokens and the reasoning
+behind the chart palette are documented in [`docs/13-DESIGN-SYSTEM.md`](docs/13-DESIGN-SYSTEM.md).
 
 Load and chaos scenarios (k6 via Docker, results committed under `docs/results/`):
 

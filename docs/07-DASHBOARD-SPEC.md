@@ -5,6 +5,21 @@ React 18 + Vite + TypeScript · TanStack Query (10 s `refetchInterval`) · Recha
 
 Built to `apps/dashboard/dist`, served by the gateway at `/dashboard` (ADR-005). Dev: Vite on `:5173` with proxy to `:8080/admin`.
 
+> **Implemented in Sprint 8.** Stack as shipped: React 19 + Vite + Tailwind 4 + TanStack Query +
+> Recharts + framer-motion, in a shadcn-style layout (`components/ui`, `lib/utils`, `@/*` alias).
+> The visual language and every token are documented in [`13-DESIGN-SYSTEM.md`](13-DESIGN-SYSTEM.md).
+>
+> Deviations from the sketch below, each with a reason:
+> - **The stacked 2xx/4xx/5xx chart was dropped.** Its colours fail colour-vision separation as a fill
+>   set, and a stack dominated by 2xx hides the errors it exists to show. Requests, latency and
+>   refusals are three single-purpose charts; the status split is a bar list.
+> - **Traffic spikes** are marked with a reference band on the requests chart, as specified.
+> - **The time range is a segmented control**, not a dropdown: five presets fit in one row and the
+>   current range stays visible.
+> - **Sparse buckets are zero-filled client-side** before charting, because the metrics API only
+>   returns buckets that contain data.
+> - **Auto refresh is 10 s and can be paused**, with the age of the data shown next to the control.
+
 ## 2. Information architecture
 ```
 /login
