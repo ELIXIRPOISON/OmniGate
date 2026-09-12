@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/assets/logo.png" alt="OmniGate" width="420"></p>
+
 # OmniGate - AI-powered API Gateway
 
 > A self-hosted gateway that fronts your microservices with JWT/API-key auth, Redis-backed rate limiting and caching, LLM-assisted anomaly detection, and a real-time React dashboard.

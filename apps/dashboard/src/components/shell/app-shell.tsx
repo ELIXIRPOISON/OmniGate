@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { Mark } from '@/components/brand/logo';
+import { Wordmark } from '@/components/brand/logo';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useAuth } from '@/features/auth/auth-context';
@@ -67,10 +67,7 @@ export function AppShell() {
             to="/"
             className="flex items-center gap-2 rounded-md px-1 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/70"
           >
-            <Mark className="h-[22px] w-[22px]" />
-            <span className="text-[14px] font-semibold tracking-[-0.01em] text-zinc-900 dark:text-zinc-50">
-              Omni<span className="text-brand-600 dark:text-brand-400">Gate</span>
-            </span>
+            <Wordmark className="h-[26px]" />
           </NavLink>
           <Button
             variant="ghost"
@@ -138,8 +135,7 @@ export function AppShell() {
           <Button variant="ghost" size="icon" aria-label="Open navigation" onClick={() => setNavOpen(true)}>
             <Menu className="h-4 w-4" />
           </Button>
-          <Mark className="h-5 w-5" />
-          <span className="text-[14px] font-semibold text-zinc-900 dark:text-zinc-50">OmniGate</span>
+          <Wordmark className="h-[24px]" />
           <div className="ml-auto">
             <ThemeToggle />
           </div>
