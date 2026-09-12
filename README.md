@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/assets/logo.png" alt="OmniGate" width="420"></p>
+<p align="center"><img src="apps/dashboard/src/assets/logo.png" alt="OmniGate" width="420"></p>
 
 # OmniGate - AI-powered API Gateway
 

@@ -93,8 +93,8 @@ components/brand/    logo (Mark, Wordmark), logo-paths (generated)
 
 ## The logo
 
-The supplied artwork is a raster PNG on a transparent ground, kept at
-`apps/dashboard/src/assets/logo.png` and mirrored to `docs/assets/logo.png` for the README banner.
+The supplied artwork is a raster PNG on a transparent ground. It lives once, at
+`apps/dashboard/src/assets/logo.png`, and the README banner points at that same file.
 
 The app cannot use the raster directly. It needs the mark at 20px in the rail and at banner size on
 the login screen, in two themes, which rules out a fixed bitmap. Redrawing it by hand was tried and
