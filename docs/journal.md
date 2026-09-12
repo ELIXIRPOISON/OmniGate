@@ -2,13 +2,22 @@
 
 Five lines a day: done / blocked / decided. Newest first.
 
+## 2026-09-12 (Sat) - the real logo
+
+- Done: the supplied artwork is in the product. `tools/trace-logo.mjs` turns the PNG into outlines - zlib decode, marching squares over the alpha coverage field, loops linked and simplified to 0.12 units - and emits `logo-paths.ts` plus `public/favicon.svg` from the same paths. The rail, the mobile header and the login screen use the full lockup, so the wordmark is the artwork's own lettering. Brand 600 is now `#1a56f0`, sampled from the disc.
+- Wrong yesterday: the logo was never missing. macOS privacy protection blocks shell access to `~/Downloads`; `ls` failed with "Operation not permitted", a pipe swallowed the error, and I read the empty output as an empty folder. Tools that hold the permission open the file fine. When a listing comes back empty, check for a swallowed permission error before concluding the directory is empty.
+- Decided: trace the artwork rather than redraw it. Measuring it first showed the disc is not a true circle and the door is not a true parallelogram, so a hand-built "clean" reconstruction drifts visibly against the original. An overlay of the traced outline on the source confirms it sits on the edge everywhere.
+- Decided: chart series 3 keeps its light-mode contrast warning. Darkening the green to clear 3:1 drops its protanopia separation from series 2 to dE 7.3 and then 5.5, below the floor of 8. Colour-vision separation outranks surface contrast when a legend and a table view already provide relief.
+- Fixed: the dark latency ramp had p95 on the dimmer step. p95 now carries the higher-contrast colour in both themes, which is the deeper blue on white and the lighter one on the dark surface.
+- Next: Sprint 9 - Dockerfile, deploy, hardening, README and the v1.0 tag.
+
 ## 2026-09-11 (Fri) - Sprint 8, dashboard and design system
 - Done: the dashboard app is real. Tailwind 4 + shadcn layout + path alias set up from the bare Vite scaffold; design tokens derived from the reference filter-token-bar the user supplied; auth context with session restore; app shell with rail, page header, theme toggle and a live readiness pill; Overview, Traffic, Anomalies (with a review drawer), API keys (one-time secret reveal), Routes and a Logs explorer with a request detail sheet. The supplied component is integrated verbatim and drives filtering on Logs and Anomalies.
 - Decided: chart colours were validated, not chosen by eye. The spec's stacked 2xx/4xx/5xx chart was dropped because the status palette fails colour-vision separation as a fill set (good vs critical dE 4.1 deutan) and because a 2xx-dominated stack hides the errors. Three single-purpose charts and a bar list replace it. Written up in docs/13-DESIGN-SYSTEM.md.
 - Found by rendering it: the metrics API only returns buckets that contain data, so charts and sparklines collapsed to a single point. Buckets are now zero-filled client-side across the window, and latency in an empty bucket is a gap rather than a dip to zero.
 - Found by rendering it: six KPI tiles across 1440px made the delta text wrap to three lines. The sparkline now runs full width along the card's bottom edge, and a delta against an empty previous window is suppressed instead of reading "new".
 - Fixed in the supplied component: its ref registration returned an assignment result, which React 19 treats as a cleanup function and TypeScript rejects. One line, now a block body.
-- Blocked: the logo was not on this machine (the path given was empty), so the brand mark is a placeholder and the brand scale is a guess. Both are isolated to two files.
+- Blocked: I recorded the logo as missing from this machine and shipped a placeholder mark with a guessed brand scale. That was wrong; see the 12 Sep entry.
 - Next: Sprint 9 - Dockerfile, deploy, hardening, README and the v1.0 tag.
 
 ## 2026-09-10 (Thu) - Sprint 7
