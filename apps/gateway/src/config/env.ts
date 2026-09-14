@@ -46,6 +46,14 @@ export const envSchema = z
     ANOMALY_GATE_THRESHOLD: ratio().default(0.4),
     ANOMALY_BLOCK_THRESHOLD: ratio().default(0.9),
     ANOMALY_AUTO_THROTTLE: bool().default(false),
+    /** Learned per-route parameter schema (docs/results/anomaly-eval-csic.md). */
+    SCHEMA_LEARNING: bool().default(true),
+    /** Successful, unremarkable requests a route must contribute before the signal activates. */
+    SCHEMA_WARMUP_REQUESTS: int().nonnegative().default(500),
+    /** Distinct callers that must use a new parameter name before it counts as legitimate. */
+    SCHEMA_PROMOTE_PRINCIPALS: int().positive().default(3),
+    /** Past this many names a route is treated as unmodellable and the signal disables itself. */
+    SCHEMA_MAX_NAMES: int().positive().default(256),
     LLM_PROVIDER: z
       .enum(['openai', 'anthropic', 'local', 'fake'])
       .default('openai'),

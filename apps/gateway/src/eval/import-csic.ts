@@ -29,6 +29,12 @@ import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { scoreHeuristics } from '../anomaly/heuristics.js';
+import { parameterNames } from '../anomaly/params.js';
+import {
+  unknownParamSignal,
+  type RouteSchema,
+  type SchemaConfig,
+} from '../anomaly/schema.service.js';
 import { redactQuery, redactText, truncate } from '../anomaly/redactor.js';
 import type { FeatureEnvelope } from '../anomaly/envelope.js';
 import type { EvalRow } from './generate-dataset.js';
@@ -124,14 +130,73 @@ function principalOf(headers: Record<string, string>, index: number): string {
 const ROUTE = 'tienda1';
 const ROUTE_METHODS = ['*'];
 
+/**
+ * Learns a route schema from a corpus using the shipped functions, including the promotion rule: a
+ * parameter name only counts as legitimate once `promotePrincipals` distinct callers have used it.
+ * The eval therefore measures what the gateway actually does, not an idealised version of it.
+ */
+export function learnSchema(
+  requests: RawRequest[],
+  config: SchemaConfig,
+): Map<string, RouteSchema> {
+  const candidates = new Map<string, Map<string, Set<string>>>();
+  const schemas = new Map<string, RouteSchema>();
+
+  for (const [i, req] of requests.entries()) {
+    const { path, query } = splitUrl(req.url);
+    const names = parameterNames({
+      query,
+      bodyText: req.body || null,
+      contentType: req.headers['content-type'] ?? 'application/x-www-form-urlencoded',
+    });
+    if (!schemas.has(path))
+      schemas.set(path, { known: new Set(), observations: 0, unbounded: false });
+    const schema = schemas.get(path)!;
+    schema.observations++;
+    if (schema.unbounded) continue;
+
+    if (!candidates.has(path)) candidates.set(path, new Map());
+    const perPath = candidates.get(path)!;
+    const caller = principalOf(req.headers, i);
+
+    for (const name of names) {
+      if (schema.known.has(name)) continue;
+      if (!perPath.has(name)) perPath.set(name, new Set());
+      const seen = perPath.get(name)!;
+      seen.add(caller);
+      if (seen.size < config.promotePrincipals) continue;
+      if (schema.known.size >= config.maxNames) {
+        schema.unbounded = true;
+        break;
+      }
+      schema.known.add(name);
+      perPath.delete(name);
+    }
+  }
+  return schemas;
+}
+
 export function toEvalRow(
   req: RawRequest,
   label: 'benign' | 'malicious',
   index: number,
+  schemas?: Map<string, RouteSchema>,
+  config?: SchemaConfig,
 ): EvalRow {
   const { path, query } = splitUrl(req.url);
   const bodyText = req.body.length > 0 ? req.body : null;
   const userAgent = req.headers['user-agent'] ?? null;
+
+  const schema = schemas?.get(path) ?? {
+    known: new Set<string>(),
+    observations: 0,
+    unbounded: false,
+  };
+  const names = parameterNames({
+    query,
+    bodyText,
+    contentType: req.headers['content-type'] ?? 'application/x-www-form-urlencoded',
+  });
 
   const heuristics = scoreHeuristics({
     method: req.method,
@@ -141,6 +206,8 @@ export function toEvalRow(
     bodyBytes: Buffer.byteLength(req.body),
     userAgent: userAgent ?? undefined,
     routeMethods: ROUTE_METHODS,
+    unknownParam:
+      schemas && config ? unknownParamSignal(names, schema, config) : 0,
     stats: { ...NEUTRAL_STATS },
   });
 
@@ -183,6 +250,8 @@ async function main(): Promise<void> {
       out: { type: 'string' },
       /** Keep every nth row, so a smaller file can be produced for quick runs. */
       stride: { type: 'string' },
+      /** Skip schema learning, to measure the pattern signals on their own. */
+      'no-schema': { type: 'boolean' },
     },
   });
 
@@ -190,8 +259,32 @@ async function main(): Promise<void> {
   const out = resolve(values.out ?? '../../docs/eval/csic-2010.jsonl');
   const stride = Math.max(1, Number(values.stride ?? 1));
 
+  const config: SchemaConfig = {
+    // CSIC has no warmup phase to speak of: the training corpus is the warmup, and it is 36,000
+    // requests. The promotion rule is applied exactly as the gateway applies it.
+    warmupRequests: 500,
+    promotePrincipals: 3,
+    maxNames: 256,
+  };
+
+  const read = async (name: string): Promise<RawRequest[]> =>
+    parseDump(await readFile(join(src, name), 'latin1'));
+
+  // normalTrafficTraining is the learning corpus and never appears in the output. Everything scored
+  // below is held out from it, so the schema cannot have seen the request it is judging.
+  let schemas: Map<string, RouteSchema> | undefined;
+  if (!values['no-schema']) {
+    const training = await read('normalTrafficTraining.txt');
+    schemas = learnSchema(training, config);
+    const names = [...schemas.values()].reduce((n, s2) => n + s2.known.size, 0);
+    console.log(
+      `learned   ${schemas.size} paths, ${names} parameter names from ${training.length} training requests`,
+    );
+  } else {
+    console.log('learned   nothing (--no-schema)');
+  }
+
   const files: Array<{ name: string; label: 'benign' | 'malicious' }> = [
-    { name: 'normalTrafficTraining.txt', label: 'benign' },
     { name: 'normalTrafficTest.txt', label: 'benign' },
     { name: 'anomalousTrafficTest.txt', label: 'malicious' },
   ];
@@ -201,12 +294,11 @@ async function main(): Promise<void> {
   const gated = { benign: 0, malicious: 0 };
 
   for (const { name, label } of files) {
-    const text = await readFile(join(src, name), 'latin1');
-    const requests = parseDump(text);
+    const requests = await read(name);
     let kept = 0;
     for (const [i, req] of requests.entries()) {
       if (i % stride !== 0) continue;
-      const row = toEvalRow(req, label, i);
+      const row = toEvalRow(req, label, i, schemas, config);
       stream.write(`${JSON.stringify(row)}\n`);
       counts[label]++;
       kept++;
@@ -219,7 +311,7 @@ async function main(): Promise<void> {
 
   await new Promise<void>((r) => stream.end(r));
   const total = counts.benign + counts.malicious;
-  console.log(`\nwrote ${total} rows to ${out}`);
+  console.log(`\nwrote ${total} held-out rows to ${out}`);
   console.log(
     `  benign     ${counts.benign}  (${gated.benign} at or above the 0.4 gate)`,
   );
@@ -229,7 +321,7 @@ async function main(): Promise<void> {
   console.log(
     '\nBehavioural features are identical for both classes by design, so any separation here is',
   );
-  console.log('payload detection. See the note at the top of import-csic.ts.');
+  console.log('payload and schema detection. See the note at the top of import-csic.ts.');
 }
 
 if (process.argv[1]?.endsWith('import-csic.js')) await main();

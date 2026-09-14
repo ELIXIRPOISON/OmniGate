@@ -169,6 +169,7 @@ describe('noisyOr + scoreHeuristics', () => {
       ua_anomaly: 0,
       auth_failures: 0,
       method_mismatch: 0,
+      unknown_param: 0,
     };
     expect(noisyOr(none)).toBe(0);
     expect(noisyOr({ ...none, injection_patterns: 1 })).toBe(0.9);

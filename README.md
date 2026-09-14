@@ -122,23 +122,34 @@ pnpm --filter @omnigate/gateway eval:anomaly -- --provider fake
 pnpm --filter @omnigate/gateway eval:anomaly -- --provider local --model qwen2.5:7b
 ```
 
-Detection is measured against the HTTP DATASET CSIC 2010: 97,065 real requests, 25,065 of them
-attacks. **Recall 0.210 at precision 1.000, with zero false positives across all 72,000 benign
-requests.** The same heuristics score 0.900 on this project's own generated dataset, and that gap is
-the most useful thing the evaluation produced: the synthetic set was scoring the detector against
-attacks it was built to catch.
+Detection is measured against the HTTP DATASET CSIC 2010: real requests against a real application,
+with the parameter schema learned from a training corpus and every scored request held out from it.
 
-Conservative detection with a very low false-positive rate is the right trade for a gateway that
-flags for review. By the rule of three the 95 percent upper bound on the false-positive rate is
-1 in 24,000, which holds precision at 0.835 even if attacks are only 0.1 percent of traffic.
+| Detector | Recall | False positives | Precision |
+|---|---|---|---|
+| Eight pattern and behavioural signals | 0.210 | 0 / 36,000 | 1.000 |
+| **+ learned route schema** | **0.494** | **0 / 36,000** | **1.000** |
 
-`qwen2.5:7b` recovers four further attacks out of 1,254 on real data. The model is a rounding error
-today, and the reason is structural: the gate only forwards requests the heuristics already suspect,
-capping the model at 24.6 percent recall however good it is. The second stage is escalate-only, so a
-weak model is a no-op rather than a regression.
+The strongest signal in the gateway is the cheapest: knowing which parameter names each route
+legitimately accepts, learned from traffic. On its own it detects more than all eight of the original
+signals combined. `idA=1` where the route only ever accepts `id` is invisible to any pattern and
+obvious to a schema.
 
-Full write-ups, including the patterns that were measured and rejected and the parts that made things
-worse before they made them better: [`anomaly-eval-csic.md`](docs/results/anomaly-eval-csic.md) and
+Learning is the part that needs care, and most of the code is safeguards: only 2xx responses that the
+inline pass found unremarkable widen a schema, a new parameter needs several distinct callers before
+it counts, unlearned routes stay silent, and routes with open-ended parameters disable the signal
+rather than alerting forever.
+
+The same heuristics score 0.900 on this project's own generated dataset. That gap is the most useful
+thing the evaluation produced: the synthetic set was scoring the detector against attacks it was
+built to catch.
+
+`qwen2.5:7b` recovers four further attacks out of 1,254. The model is a rounding error today and the
+reason is structural, not quality: the gate only forwards what the inline pass already suspects. The
+second stage is escalate-only, so a weak model is a no-op rather than a regression.
+
+Full write-ups, including the patterns that were measured and rejected and the fix that made things
+worse before it made them better: [`anomaly-eval-csic.md`](docs/results/anomaly-eval-csic.md) and
 [`anomaly-eval.md`](docs/results/anomaly-eval.md).
 
 Every proxied request lands in a partitioned audit log, and the control plane exposes it:

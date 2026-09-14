@@ -20,6 +20,12 @@ export interface HeuristicInput {
   userAgent?: string;
   /** Route's allowed methods; ['*'] means any. */
   routeMethods: string[];
+  /**
+   * Strength of the learned-schema signal, 0..1, computed by anomaly/schema.service.ts. Passed in
+   * rather than computed here so the scorer stays pure and the Redis-backed schema stays testable
+   * on its own.
+   */
+  unknownParam?: number;
   stats: {
     /** Requests by this principal in the last 10 s (from the rate-limit sorted set). */
     burstCount10s: number;
@@ -160,6 +166,7 @@ export function scoreHeuristics(input: HeuristicInput): HeuristicResult {
     ua_anomaly: userAgentSignal(input.userAgent),
     auth_failures: authFailuresSignal(input.stats.authFailures60s),
     method_mismatch: methodMismatchSignal(input.method, input.routeMethods),
+    unknown_param: clamp01(input.unknownParam ?? 0),
   };
 
   const categories = new Set<AttackCategory>(injection.categories);
@@ -167,6 +174,10 @@ export function scoreHeuristics(input: HeuristicInput): HeuristicResult {
   if (signals.burst >= 0.8 && signals.path_enum >= 0.3)
     categories.add('scraping');
   if (signals.auth_failures >= 0.5) categories.add('credential_stuffing');
+  // A name this route has never accepted: tampering if it rides alongside a payload signature,
+  // probing otherwise.
+  if (signals.unknown_param > 0)
+    categories.add(signals.injection_patterns > 0 ? 'other' : 'enumeration');
   if (signals.ua_anomaly >= 1) categories.add('enumeration');
 
   return {

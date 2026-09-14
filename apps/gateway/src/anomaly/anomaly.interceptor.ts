@@ -16,6 +16,12 @@ import type { Env } from '../config/env.js';
 import type { RouteConfig } from '../config/routes.js';
 import { rateLimitKey, resolvePolicy } from '../rate-limit/policy.js';
 import { combineScores } from './combine.js';
+import { parameterNames } from './params.js';
+import {
+  RouteSchemaService,
+  unknownParamSignal,
+  EMPTY_SCHEMA,
+} from './schema.service.js';
 import { BodyTooLargeError, hasBody, readRawBody } from './body.js';
 import type { AnomalyJobData, FeatureEnvelope } from './envelope.js';
 import { AnomalyEventsService } from './events.service.js';
@@ -55,6 +61,7 @@ export class AnomalyInterceptor implements NestInterceptor {
   constructor(
     @Inject(ENV) private readonly env: Env,
     private readonly stats: AnomalyStatsService,
+    private readonly schema: RouteSchemaService,
     private readonly queue: AnomalyQueue,
     private readonly llm: LlmService,
     private readonly events: AnomalyEventsService,
@@ -102,14 +109,31 @@ export class AnomalyInterceptor implements NestInterceptor {
     const query = q === -1 ? '' : url.slice(q);
     const policy = resolvePolicy(route, req.keyPolicy, this.env);
     const clientIp = req.ip ?? req.socket.remoteAddress ?? 'unknown';
-    const stats = await this.stats.recordAndRead({
-      principal: who,
-      clientIp,
-      route: route.service,
-      path,
-      bodyBytes: body.length,
-      rateLimitKey: rateLimitKey(policy.id, who),
-    });
+    const schemaConfig = {
+      warmupRequests: this.env.SCHEMA_WARMUP_REQUESTS,
+      promotePrincipals: this.env.SCHEMA_PROMOTE_PRINCIPALS,
+      maxNames: this.env.SCHEMA_MAX_NAMES,
+    };
+    const names = this.env.SCHEMA_LEARNING
+      ? parameterNames({
+          query,
+          bodyText,
+          contentType: req.headers['content-type'],
+        })
+      : [];
+    const [stats, schema] = await Promise.all([
+      this.stats.recordAndRead({
+        principal: who,
+        clientIp,
+        route: route.service,
+        path,
+        bodyBytes: body.length,
+        rateLimitKey: rateLimitKey(policy.id, who),
+      }),
+      this.env.SCHEMA_LEARNING
+        ? this.schema.read(route.service)
+        : Promise.resolve(EMPTY_SCHEMA),
+    ]);
     const userAgent = redactUserAgent(req.headers['user-agent']);
     const heuristic = scoreHeuristics({
       method: req.method,
@@ -119,6 +143,7 @@ export class AnomalyInterceptor implements NestInterceptor {
       bodyBytes: body.length,
       userAgent,
       routeMethods: route.methods,
+      unknownParam: unknownParamSignal(names, schema, schemaConfig),
       stats: { ...stats, policyMax: policy.maxRequests },
     });
 
@@ -135,6 +160,24 @@ export class AnomalyInterceptor implements NestInterceptor {
     }
     res.once('finish', () => {
       if (res.statusCode >= 400) this.stats.recordError(who);
+      // Widen the schema only from requests the upstream accepted *and* the inline pass found
+      // unremarkable, so a request must look benign to two independent judges before it can teach
+      // the route a new parameter name. Fire-and-forget: this is off the response path.
+      if (
+        this.env.SCHEMA_LEARNING &&
+        res.statusCode < 400 &&
+        heuristic.score < this.env.ANOMALY_GATE_THRESHOLD &&
+        names.length > 0
+      ) {
+        void this.schema
+          .observe({
+            route: route.service,
+            principal: who,
+            names,
+            config: schemaConfig,
+          })
+          .catch(() => undefined);
+      }
     });
 
     const buildEnvelope = async (): Promise<FeatureEnvelope> => ({

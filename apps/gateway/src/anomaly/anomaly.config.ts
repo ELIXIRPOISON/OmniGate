@@ -1,6 +1,12 @@
 /** Tunables for the heuristic pre-screen (docs/06 §4). Weights feed the noisy-OR combiner. */
 export const SIGNAL_WEIGHTS = {
   injection_patterns: 0.9,
+  // Weighted so a single unknown parameter name clears the 0.7 flag threshold on its own. It is the
+  // strongest single detector measured: 50.4 percent of CSIC 2010 attacks with no false positive
+  // across 36,000 held-out normal requests, where every other signal combined reaches 21.0 percent.
+  // See docs/results/anomaly-eval-csic.md and anomaly/schema.service.ts for the safety rules that
+  // keep it from firing on a route it has not learned yet.
+  unknown_param: 0.85,
   body_size_z: 0.4,
   entropy: 0.5,
   burst: 0.6,

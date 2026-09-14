@@ -14,6 +14,24 @@ committed; the importer and the mirror it comes from are.
 
 ## The headline
 
+> Updated after Phase 2. The evaluation below is now properly held out: the schema is learned from
+> `normalTrafficTraining` and every scored row comes from `normalTrafficTest` and
+> `anomalousTrafficTest`, which the learner never saw.
+
+| Detector | Recall | FP / 36,000 benign | Precision |
+|---|---|---|---|
+| Pattern and behavioural signals | 0.210 | 0 | 1.000 |
+| **+ learned parameter schema** | **0.494** | **0** | **1.000** |
+
+Learning which parameter names each route accepts, 42 names across 28 paths, more than doubles
+recall at no measurable cost in false positives. It detects more on its own than all eight of the
+original signals combined.
+
+It also unblocks the model. Gated attacks go from 6,171 to 13,114, so the ceiling on what the
+classification stage can ever contribute rises from 24.6 to 52.3 percent.
+
+## The original finding
+
 | Dataset | Recall @ 0.7 | Precision |
 |---|---|---|
 | Our own generated set, 200 rows | 0.900 | 1.000 |
@@ -82,34 +100,36 @@ app deliberately, such as fetching a static image. Even a perfect detector would
 
 ## The precision/recall tradeoff, visible for the first time
 
-The synthetic set had no hard negatives at all, so every threshold looked free. On real traffic:
+The synthetic set had no hard negatives at all, so every threshold looked free. On real traffic,
+with the schema signal in place:
 
 | Threshold | Recall | Precision | False positives |
 |---|---|---|---|
-| 0.3 | 0.309 | 0.695 | 3,410 |
-| 0.5 | 0.213 | 1.000 | 2 |
-| 0.7 | 0.210 | 1.000 | 0 |
+| 0.3 | 0.562 | 0.892 | 1,707 |
+| 0.5 | 0.498 | 1.000 | 1 |
+| 0.7 | 0.494 | 1.000 | 0 |
 | 0.9 | 0.210 | 1.000 | 0 |
 
-Buying ten points of recall by dropping to 0.3 costs a 4.7 percent false-positive rate. The default
-of 0.7 is in the right place, and now there is evidence for it rather than an assertion.
+The default of 0.7 is in the right place, and now there is evidence for it rather than an assertion.
+Note the cliff at 0.9: above the schema signal's weight the detector falls back to patterns alone.
+Anyone raising the threshold that far is turning off the strongest signal without meaning to.
 
 ## Precision at realistic base rates
 
-Zero false positives in 72,000 is a count, not a guarantee. By the rule of three, the 95 percent
-upper bound on the false-positive rate is 3/72,000, about **1 in 24,000**. At that pessimistic bound:
+Zero false positives in 36,000 held-out benign requests is a count, not a guarantee. By the rule of
+three, the 95 percent upper bound on the false-positive rate is 3/36,000, about **1 in 12,000**. At
+that pessimistic bound, with recall 0.494:
 
 | Base rate of attacks | True alerts per 1M | False alerts per 1M | Precision |
 |---|---|---|---|
-| 1% | 2,100 | 41 | 0.981 |
-| 0.1% | 210 | 42 | 0.835 |
-| 0.01% | 21 | 42 | 0.335 |
+| 1% | 4,940 | 83 | 0.983 |
+| 0.1% | 494 | 83 | 0.856 |
+| 0.01% | 49 | 83 | 0.373 |
 
-This is the table that decides whether the thing is usable, and it is reassuring in a way the earlier
-numbers were not entitled to be. The detector is conservative: it catches roughly a fifth of attacks
-and almost never cries wolf. For a gateway that flags for review, that is the right trade. Below
-about 0.05 percent attack traffic the alerts stop being mostly true and an operator would want to
-raise the bar or add a second condition.
+This is the table that decides whether the thing is usable. The detector catches about half of
+attacks and rarely cries wolf, which for a gateway that flags for review is the right trade. Below
+roughly 0.02 percent attack traffic the alerts stop being mostly true and an operator would want to
+raise the bar or require a second condition.
 
 ## What the model contributes on real traffic
 
@@ -127,16 +147,20 @@ size of its contribution on this data: 0.3 points of recall.
 It does not make anything worse, which is the escalate-only rule in `anomaly/combine.ts` doing its
 job, and it costs 7.7 s per call at concurrency 4.
 
-The deeper problem is structural. The gate only lets through requests the heuristics already suspect,
-so the model sees 24.6 percent of the attacks in the set and its ceiling is 24.6 percent recall no
-matter how good it is. **The bottleneck is the gate, not the model.** Widening it means paying for
-classification on traffic the heuristics think is fine, which the cost model has to absorb.
+The deeper problem is structural. The gate only lets through requests the inline pass already
+suspects, so at the time of that run the model saw 24.6 percent of the attacks and its ceiling was
+24.6 percent recall no matter how good it is. **The bottleneck is the gate, not the model.**
+
+The schema signal has since raised that ceiling to 52.3 percent by gating 13,114 attacks instead of
+6,171. Whether a model can do anything with the extra traffic is unmeasured; that run has not been
+repeated, and on current evidence it would be optimistic to expect much.
 
 ## What this changes
 
-- The heuristics carry the system; the model is currently a rounding error on real attack data.
-- The gate caps the model before the model gets a chance, so improving the model is not the next
-  move. Improving recall at the gate, or sampling below it, is.
+- The learned schema carries the system, the patterns come second, and the model is a rounding error
+  on real attack data.
+- The gate caps the model before the model gets a chance. Improving recall at the gate was the next
+  move, and it worked: the ceiling went from 24.6 to 52.3 percent.
 - Parameter tampering is the largest miss category and needs schema learning rather than patterns.
 - The 0.7 default threshold is now evidence-backed.
 - Conservative detection with a very low false-positive rate is usable at realistic base rates, which
@@ -161,3 +185,49 @@ pnpm --filter @omnigate/gateway eval:import-csic -- --src ./csic --out /tmp/csic
 pnpm --filter @omnigate/gateway eval:anomaly -- --dataset /tmp/csic-sample.jsonl \
   --provider local --model qwen2.5:7b --timeout 60000 --concurrency 4
 ```
+
+## Phase 2: the learned schema
+
+Reading the misses said parameter tampering was the largest category and that no pattern could reach
+it: `idA=1` for `id=1`, a price that does not match the catalogue. Syntactically perfect requests,
+wrong only against the application's schema.
+
+So the gateway learns the schema. `anomaly/schema.service.ts` keeps, per route, the set of parameter
+names that route has legitimately accepted, and `unknown_param` fires when a request carries one that
+is not in it.
+
+Measured on the held-out split, it is the strongest single detector in the gateway:
+
+| Signal | Recall | FP / 36,000 |
+|---|---|---|
+| All eight original signals | 0.210 | 0 |
+| `unknown_param` alone | 0.494 | 0 |
+
+### The detection is the easy part
+
+Almost all of the work is in not making it dangerous:
+
+- **Poisoning.** A schema learned from all traffic is a schema an attacker can teach. Only requests
+  the upstream answered with a 2xx *and* that scored below the gate are learned from, so a request
+  must look benign to two independent judges before it can widen a route's schema.
+- **Cold start.** The signal stays silent until a route has contributed `SCHEMA_WARMUP_REQUESTS`
+  observations. A fresh deployment does not alert on everything it has never seen.
+- **Drift.** A new parameter is held as a candidate and promoted only once
+  `SCHEMA_PROMOTE_PRINCIPALS` *distinct* callers have used it successfully. A real API rollout
+  satisfies that immediately; one attacker does not.
+- **Unbounded routes.** Search facets and similar are not schema-able. Past `SCHEMA_MAX_NAMES` the
+  route is marked unmodellable and the signal disables itself there rather than alerting forever.
+
+The eval applies the promotion rule exactly as the gateway does, which is why it scores 0.494 rather
+than the 0.504 an idealised "any name seen once" learner reaches.
+
+### What it does not tell us
+
+CSIC's application has 28 paths and 42 parameter names. Real APIs are larger and churn more, so the
+zero-false-positive result is optimistic. The mechanism is sound; the numbers are from a small,
+stable application and will not transfer unchanged. The safeguards above are what decide whether it
+survives a real API, and none of them can be tested against CSIC, because CSIC has no timeline,
+no deployments and no attackers who arrive during the learning window.
+
+That is the argument for the honeypot: it is the only way to watch schema learning meet traffic
+nobody curated.

@@ -62,6 +62,7 @@ const envelope = (over: Partial<FeatureEnvelope> = {}): FeatureEnvelope => ({
       ua_anomaly: 0,
       auth_failures: 0,
       method_mismatch: 0,
+      unknown_param: 0,
     },
     categories: [],
     matchedPatterns: [],

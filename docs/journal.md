@@ -2,6 +2,17 @@
 
 Five lines a day: done / blocked / decided. Newest first.
 
+## 2026-09-14 (Mon, very late) - Phase 2: the cheapest signal is the strongest
+
+- Done: the gateway learns a per-route parameter schema and `unknown_param` fires on names a route has never legitimately accepted. Held out properly - schema learned from `normalTrafficTraining`, every scored row from the test files. Recall 0.210 -> 0.494 with false positives still 0 of 36,000.
+- It detects more on its own than all eight original signals combined, from 42 parameter names across 28 paths. The probe that proved this was 40 lines. The LLM stage is the most complex thing in the repo and contributes four detections out of 1,254.
+- Also fixes the gate bottleneck found earlier: gated attacks go 6,171 -> 13,114, so the ceiling on what classification can ever contribute rises from 24.6 to 52.3 percent.
+- Almost all the work is in not making it dangerous. Only 2xx responses that scored below the gate widen a schema, so a request must look benign to two independent judges before it teaches a route anything. A new name is a candidate until three distinct callers have used it successfully, which a rollout satisfies at once and one attacker does not. Unlearned routes are silent. Routes with open-ended names mark themselves unmodellable and switch the signal off rather than alerting forever.
+- The eval applies the promotion rule exactly as the gateway does, which is why it scores 0.494 rather than the 0.504 an idealised learner reaches. Worth the two points to measure the real thing.
+- Noticed in the sweep: a cliff at threshold 0.9. Above the schema signal's own weight the detector silently falls back to patterns alone and recall drops to 0.210. Anyone raising the threshold that far is turning off the strongest signal without meaning to; documented.
+- Caveat that matters: CSIC's app has 28 paths and 42 parameter names. Real APIs are larger and churn more, so zero false positives is optimistic. None of the safeguards can be tested against CSIC either, because it has no timeline, no deployments and no attacker arriving mid-learning. That is the honeypot argument.
+- Next: behavioural half still unmeasured. Then Sprint 9.
+
 ## 2026-09-14 (Mon, late) - Phase 1: the evaluation was a self-test, and the real number is 0.210
 
 - Done: imported the HTTP DATASET CSIC 2010, 97,065 real requests with 25,065 attacks, and measured the same detector against traffic nobody here wrote. Recall 0.065 where our own generated set said 0.900. That fourteen-fold gap is the whole point of the exercise: the synthetic set was scoring the heuristics against attacks they were designed to catch.

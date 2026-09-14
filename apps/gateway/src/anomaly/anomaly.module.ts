@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AnomalyInterceptor } from './anomaly.interceptor.js';
 import { AnomalyEventsService } from './events.service.js';
+import { RouteSchemaService } from './schema.service.js';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { LlmGuardrails } from './llm/guardrails.js';
@@ -20,6 +21,7 @@ import { AnomalyWorker } from './queue/anomaly.worker.js';
     AnomalyWorker,
     AnomalyInterceptor,
     AnomalyEventsService,
+    RouteSchemaService,
     LlmGuardrails,
     LlmService,
     {
@@ -33,6 +35,7 @@ import { AnomalyWorker } from './queue/anomaly.worker.js';
     AnomalyWorker,
     AnomalyInterceptor,
     AnomalyEventsService,
+    RouteSchemaService,
     LlmService,
     LLM_PROVIDER_TOKEN,
   ],
