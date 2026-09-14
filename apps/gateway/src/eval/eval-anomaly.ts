@@ -5,6 +5,7 @@ import { loadDotenv } from '../config/dotenv.js';
 import { loadEnv } from '../config/env.js';
 import type { EvalRow } from './generate-dataset.js';
 import { createLlmProvider } from '../anomaly/llm/llm.factory.js';
+import { combineScores } from '../anomaly/combine.js';
 import type { LlmProvider } from '../anomaly/llm/provider.js';
 
 /**
@@ -129,7 +130,7 @@ export async function scoreRows(
       return {
         ...base,
         llm: verdict.score,
-        combined: verdict.score,
+        combined: combineScores(heuristic, verdict),
         latencyMs,
       };
     } catch (err) {

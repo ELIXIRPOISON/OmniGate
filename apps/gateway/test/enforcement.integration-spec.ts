@@ -22,13 +22,13 @@ import { PrismaService } from '../src/prisma/prisma.service.js';
 import { RedisService } from '../src/redis/redis.service.js';
 
 const MALICIOUS: Verdict = {
-  score: 0.97,
+   confidence: 'medium',score: 0.97,
   verdict: 'malicious',
   categories: ['sqli'],
   reasoning: 'SQL tautology payload from a scanner user agent.',
 };
 const BENIGN: Verdict = {
-  score: 0.05,
+   confidence: 'medium',score: 0.05,
   verdict: 'benign',
   categories: [],
   reasoning: 'Ordinary read.',

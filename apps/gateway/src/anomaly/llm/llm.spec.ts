@@ -18,7 +18,12 @@ import {
 } from './llm.factory.js';
 import { LlmService } from './llm.service.js';
 import { OpenAiProvider } from './openai.provider.js';
-import { LlmError, parseVerdict, type LlmProvider } from './provider.js';
+import {
+  CONFIDENCE_SCORE,
+  LlmError,
+  parseVerdict,
+  type LlmProvider,
+} from './provider.js';
 
 const fixture = (name: string): unknown =>
   JSON.parse(
@@ -98,30 +103,58 @@ function stubFetch(
 describe('parseVerdict', () => {
   it('accepts clean JSON, fenced JSON and JSON wrapped in prose', () => {
     const clean = parseVerdict(
-      '{"score":0.9,"verdict":"malicious","categories":["sqli"],"reasoning":"x"}',
+      '{"verdict":"malicious","confidence":"high","categories":["sqli"],"reasoning":"x"}',
     );
     expect(clean).toMatchObject({
-      score: 0.9,
       verdict: 'malicious',
+      confidence: 'high',
       categories: ['sqli'],
     });
     expect(
       parseVerdict(
-        '```json\n{"score":0.1,"verdict":"benign","categories":[],"reasoning":"ok"}\n```',
+        '```json\n{"verdict":"benign","confidence":"high","categories":[],"reasoning":"ok"}\n```',
       ).verdict,
     ).toBe('benign');
     expect(
       parseVerdict(
-        'Sure! {"score":0.5,"verdict":"suspicious","categories":[],"reasoning":"hm"} hope that helps',
+        'Sure! {"verdict":"suspicious","confidence":"low","categories":[],"reasoning":"hm"} hope that helps',
       ).verdict,
     ).toBe('suspicious');
   });
 
+  it('derives the score from verdict and confidence, not from the model number', () => {
+    // A model that still volunteers a score has it recorded but not acted on: this is the whole
+    // point of the change, since the number it volunteers tracks the heuristic score it was shown.
+    const v = parseVerdict(
+      '{"score":0.11,"verdict":"suspicious","confidence":"high","categories":[],"reasoning":"x"}',
+    );
+    expect(v.rawScore).toBe(0.11);
+    expect(v.score).toBe(CONFIDENCE_SCORE.suspicious.high);
+  });
+
+  it('puts a confidently suspicious request above the flag threshold', () => {
+    // The regression this change exists to prevent: the old prompt capped "suspicious" at 0.7 and
+    // the flag threshold was also 0.7, so no suspicious verdict could ever trigger action.
+    expect(CONFIDENCE_SCORE.suspicious.high).toBeGreaterThan(0.7);
+    expect(CONFIDENCE_SCORE.suspicious.high).toBeLessThan(0.9);
+    expect(CONFIDENCE_SCORE.malicious.medium).toBeGreaterThanOrEqual(0.9);
+    // Confidence is in the verdict, not in the danger: surer it is benign means a lower score.
+    expect(CONFIDENCE_SCORE.benign.high).toBeLessThan(CONFIDENCE_SCORE.benign.low);
+  });
+
+  it('defaults a missing confidence to medium', () => {
+    const v = parseVerdict(
+      '{"verdict":"malicious","categories":[],"reasoning":"x"}',
+    );
+    expect(v.confidence).toBe('medium');
+    expect(v.score).toBe(CONFIDENCE_SCORE.malicious.medium);
+  });
+
   it('drops unknown categories, clamps reasoning and coerces numeric strings', () => {
     const v = parseVerdict(
-      `{"score":"0.42","verdict":"suspicious","categories":["sqli","aliens","XSS"],"reasoning":"${'y'.repeat(400)}"}`,
+      `{"score":"0.42","verdict":"suspicious","confidence":"low","categories":["sqli","aliens","XSS"],"reasoning":"${'y'.repeat(400)}"}`,
     );
-    expect(v.score).toBe(0.42);
+    expect(v.rawScore).toBe(0.42);
     expect(v.categories).toEqual(['sqli', 'xss']);
     expect(v.reasoning).toHaveLength(240);
   });
@@ -130,12 +163,17 @@ describe('parseVerdict', () => {
     expect(() => parseVerdict('not json at all')).toThrow(LlmError);
     expect(() =>
       parseVerdict(
-        '{"score":4,"verdict":"malicious","categories":[],"reasoning":"x"}',
+        '{"score":4,"verdict":"malicious","confidence":"high","categories":[],"reasoning":"x"}',
       ),
     ).toThrow(LlmError);
     expect(() =>
       parseVerdict(
-        '{"score":0.5,"verdict":"spicy","categories":[],"reasoning":"x"}',
+        '{"verdict":"spicy","confidence":"high","categories":[],"reasoning":"x"}',
+      ),
+    ).toThrow(LlmError);
+    expect(() =>
+      parseVerdict(
+        '{"verdict":"malicious","confidence":"certain","categories":[],"reasoning":"x"}',
       ),
     ).toThrow(LlmError);
   });
@@ -158,8 +196,9 @@ describe('OpenAiProvider (recorded fixtures)', () => {
       { timeoutMs: 5_000 },
     );
     expect(verdict).toMatchObject({
-      score: 0.96,
       verdict: 'malicious',
+      confidence: 'high',
+      score: CONFIDENCE_SCORE.malicious.high,
       categories: ['sqli'],
     });
 
@@ -172,9 +211,18 @@ describe('OpenAiProvider (recorded fixtures)', () => {
     expect(sent.model).toBe('gpt-4o-mini');
     expect(sent.response_format.type).toBe('json_object');
     expect(sent.messages[0].role).toBe('system');
-    // three few-shot pairs plus the request under test
-    expect(sent.messages.filter((m) => m.role === 'user')).toHaveLength(4);
+    // four few-shot pairs plus the request under test
+    expect(sent.messages.filter((m) => m.role === 'user')).toHaveLength(5);
     expect(sent.messages.at(-1)?.content).toContain('<request>');
+
+    // The envelope carries the heuristic score. Withholding it was tried and measured: the model's
+    // own judgement is close to constant without it and recall fell from 0.900 to 0.433. It is safe
+    // to send because combine.ts only lets the model raise the score, never lower it.
+    expect(sent.messages.at(-1)?.content).toContain('signals');
+    expect(sent.messages.at(-1)?.content).toContain('score');
+    // The model is asked for a judgement, not a number.
+    expect(sent.messages[0].content).toContain('confidence');
+    expect(sent.messages[0].content).toContain('Do not return a numeric score');
   });
 
   it('works against any OpenAI-compatible base URL (Groq, Ollama, vLLM)', async () => {
@@ -247,8 +295,9 @@ describe('AnthropicProvider (recorded fixtures)', () => {
       fetchImpl,
     }).classify(envelope(), { timeoutMs: 5_000 });
     expect(verdict).toMatchObject({
-      score: 0.72,
       verdict: 'suspicious',
+      confidence: 'high',
+      score: CONFIDENCE_SCORE.suspicious.high,
       categories: ['scraping', 'enumeration'],
     });
 
@@ -442,7 +491,7 @@ describe('LlmGuardrails', () => {
     const hash = dedupHash(envelope());
     expect(await g.cachedVerdict(hash)).toBeNull();
     await g.cacheVerdict(hash, {
-      score: 0.4,
+       confidence: 'medium',score: 0.4,
       verdict: 'suspicious',
       categories: [],
       reasoning: 'x',
@@ -508,6 +557,7 @@ describe('LlmService', () => {
 
   const okVerdict = {
     score: 0.8,
+    confidence: 'medium' as const,
     verdict: 'malicious' as const,
     categories: ['sqli' as const],
     reasoning: 'x',

@@ -9,13 +9,19 @@
       "id": "toolu_omnigate_fixture_1",
       "name": "record_verdict",
       "input": {
-        "score": 0.72,
         "verdict": "suspicious",
-        "categories": ["scraping", "enumeration"],
+        "confidence": "high",
+        "categories": [
+          "scraping",
+          "enumeration"
+        ],
         "reasoning": "Several thousand distinct paths in ten minutes from one address with a scripting user agent."
       }
     }
   ],
   "stop_reason": "tool_use",
-  "usage": { "input_tokens": 940, "output_tokens": 61 }
+  "usage": {
+    "input_tokens": 940,
+    "output_tokens": 61
+  }
 }

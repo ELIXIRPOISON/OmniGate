@@ -2,6 +2,16 @@
 
 Five lines a day: done / blocked / decided. Newest first.
 
+## 2026-09-14 (Mon, night) - Phase 0: two prompt bugs, one wrong fix, one real bug
+
+- Done: the classifier no longer returns a number. It returns a verdict and a confidence, and `CONFIDENCE_SCORE` derives the score in code. The old prompt put "suspicious" at 0.3-0.7 while the decision threshold was also 0.7, so any request the model called suspicious was mathematically barred from triggering action. It was obeying instructions; we wrote the instructions.
+- Also found in the prompt: all three few-shots set their answer within 0.04 of the heuristic score shown in the same envelope. We taught the model to echo, then were disappointed when it echoed.
+- Wrong fix, recorded because it was instructive: withholding the heuristic score took recall from 0.900 to 0.433. Sampling 21 gated rows showed why - without that field the model answers "suspicious / medium" to 17 of them, SQL injection included. Its independent judgement on these envelopes is close to constant. The heuristic score was not noise it was lazily copying; it was the best feature it had. The score stays.
+- The bug that mattered, which the failed experiment exposed: the gateway took the model's number outright, so a weak model could lower a confident heuristic finding and silently unflag an attack. `anomaly/combine.ts` makes the second stage escalate-only - it may raise a score, never lower one, except on a confident `benign`, which is the partner-sync case the model exists for.
+- Net effect: recall at the operating point did not move, 0.900 either way. What moved is the block-threshold range, where the ensemble now beats both stages (0.808 at threshold 0.8 against 0.600 heuristic and 0.475 model), and the floor: plugging in an untested model is now a no-op instead of a regression. Given that the whole point is to let people bring their own model, the floor is worth more than the point of recall.
+- Still true and still the biggest gap: the dataset is ours, 60 percent malicious, with no hard negatives at all. The false-positive rate is unmeasured, not zero. Phase 1 is CSIC 2010 plus replayed logs plus honeypot capture.
+- Next: Phase 1, and Sprint 9 when the deploy question is settled.
+
 ## 2026-09-14 (Mon, later) - the model is real now, and it says something inconvenient
 
 - Done: installed Ollama, pulled `qwen2.5:7b`, and re-ran the Sprint 6 eval against a real model for the first time. 115 calls, 0 failures. Every number in `docs/results/anomaly-eval.md` is now measured rather than stubbed, and the `fake` run is kept beside it as the baseline it always was.

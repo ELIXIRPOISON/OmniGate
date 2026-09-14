@@ -64,10 +64,16 @@ export class FakeProvider implements LlmProvider {
     }
 
     score = Math.round(Math.min(1, Math.max(0, score)) * 1000) / 1000;
+    const verdict =
+      score >= 0.7 ? 'malicious' : score >= 0.3 ? 'suspicious' : 'benign';
+    // The stub keeps its own number as `rawScore` and reports a confidence, so it exercises the same
+    // contract a real provider does. `score` stays its own value: this stub is the deterministic
+    // baseline the pipeline was built against and its behaviour must not move when calibration does.
     return {
+      rawScore: score,
       score,
-      verdict:
-        score >= 0.7 ? 'malicious' : score >= 0.3 ? 'suspicious' : 'benign',
+      confidence: score >= 0.8 || score <= 0.2 ? 'high' : 'medium',
+      verdict,
       categories: [...categories].filter((c) =>
         [
           'sqli',

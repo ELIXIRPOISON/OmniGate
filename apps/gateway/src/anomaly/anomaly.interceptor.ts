@@ -15,6 +15,7 @@ import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import type { RouteConfig } from '../config/routes.js';
 import { rateLimitKey, resolvePolicy } from '../rate-limit/policy.js';
+import { combineScores } from './combine.js';
 import { BodyTooLargeError, hasBody, readRawBody } from './body.js';
 import type { AnomalyJobData, FeatureEnvelope } from './envelope.js';
 import { AnomalyEventsService } from './events.service.js';
@@ -246,7 +247,11 @@ export class AnomalyInterceptor implements NestInterceptor {
       this.env.LLM_TIMEOUT_SYNC_MS,
     );
     verdict.classification = classification;
-    const score = classification.verdict?.score;
+    // The model escalates, it does not overwrite: a second stage must never be able to unflag what
+    // the inline pass already caught. See anomaly/combine.ts for the measurement behind that.
+    const score = classification.verdict
+      ? combineScores(envelope.heuristics.score, classification.verdict)
+      : undefined;
 
     if (score !== undefined && score >= this.env.ANOMALY_BLOCK_THRESHOLD) {
       verdict.blocked = true;

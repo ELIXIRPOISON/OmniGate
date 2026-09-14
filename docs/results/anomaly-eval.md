@@ -7,91 +7,98 @@ deterministically by `pnpm --filter @omnigate/gateway eval:generate`. Harness:
 Decision threshold 0.7, gate 0.4. Only rows at or above the gate reach the model, as in production:
 115 of 200 here, all of them malicious, because the set is adversarial by construction.
 
-Two runs are recorded. The first uses `qwen2.5:7b` served locally by Ollama and is the real result.
-The second uses the `fake` provider, a deterministic rule stub, and is kept only as the baseline the
-pipeline was built against.
+Results below are from `qwen2.5:7b` served locally by Ollama. The `fake` provider, a deterministic
+rule stub, is kept as the baseline the pipeline was built against; its sweep is
+[`anomaly-threshold-sweep-fake.csv`](anomaly-threshold-sweep-fake.csv). The stub scored recall 0.942
+because it was written to weight the exact statistics this dataset turns on, which is a property of
+the dataset rather than of the stub.
 
 ## Results
 
-**`local` / qwen2.5:7b via Ollama** — 115 calls, 0 failures. Sweep:
+`local` / qwen2.5:7b via Ollama, 115 calls, 0 failures. Sweep:
 [`anomaly-threshold-sweep-local.csv`](anomaly-threshold-sweep-local.csv).
 
 | Stage | Precision | Recall | F1 | TP | FP | FN | TN |
 |---|---|---|---|---|---|---|---|
 | Heuristics only | 1.000 | 0.900 | 0.947 | 108 | 0 | 12 | 80 |
-| Model only | 1.000 | 0.900 | 0.947 | 108 | 0 | 12 | 80 |
+| Model only | 1.000 | 0.475 | 0.644 | 57 | 0 | 63 | 80 |
 | Combined | 1.000 | 0.900 | 0.947 | 108 | 0 | 12 | 80 |
 
-**`fake` stub** — sweep: [`anomaly-threshold-sweep-fake.csv`](anomaly-threshold-sweep-fake.csv).
+Targets from docs/06 section 8.3 (precision >= 0.85, recall >= 0.80) are met.
 
-| Stage | Precision | Recall | F1 | TP | FP | FN | TN |
-|---|---|---|---|---|---|---|---|
-| Heuristics only | 1.000 | 0.900 | 0.947 | 108 | 0 | 12 | 80 |
-| Model only | 1.000 | 0.942 | 0.970 | 113 | 0 | 7 | 80 |
-| Combined | 1.000 | 0.942 | 0.970 | 113 | 0 | 7 | 80 |
+At the 0.7 operating point the model changes nothing: the heuristics already catch everything it
+catches. It earns its place at the thresholds an operator would actually *block* on, where the two
+stages disagree about different rows and the combination beats both:
 
-Targets from docs/06 section 8.3 (precision >= 0.85, recall >= 0.80) are met by the heuristics alone
-in both runs.
+| Decision threshold | Heuristics | Model | Combined |
+|---|---|---|---|
+| 0.70 | 0.900 | 0.475 | 0.900 |
+| 0.80 | 0.600 | 0.475 | **0.808** |
+| 0.90 | 0.375 | 0.475 | **0.583** |
+| 0.95 | 0.008 | 0.475 | 0.475 |
 
-## What the real model did and did not do
+Every number here comes from a synthetic dataset this project generated itself, which is the largest
+caveat on the page: see *What these numbers cannot tell you* at the end.
 
-**It did not change a single decision at threshold 0.7.** Every metric is identical to the heuristics
-alone. The stub beat it, which is not surprising once you know the stub was written to weight the
-ten-minute sender statistics that the inline pass keeps deliberately cheap. A stub tuned to the
-dataset is not a model.
+Precision stays 1.000 at every row of that table. Heuristic scores are spread thinly, so raising the
+bar drops traffic off a cliff; the model's are concentrated. Neither alone is good at 0.9. Together
+they catch 70 of 120 where the better single stage catches 57.
 
-**It did make the system far less sensitive to where the threshold sits.** This is the real benefit
-and it does not show up in a single-threshold table:
+## How this was arrived at, including the parts that did not work
 
-| Decision threshold | Heuristic recall | Model recall |
-|---|---|---|
-| 0.70 | 0.900 | 0.900 |
-| 0.75 | 0.717 | 0.892 |
-| 0.80 | 0.600 | 0.700 |
-| 0.85 | 0.458 | 0.575 |
-| 0.95 | 0.008 | 0.342 |
+The first run of this eval used a prompt that asked the model for a numeric score and showed it the
+combined heuristic score in the envelope. Three things were wrong with it, and fixing them took two
+attempts because the obvious fix was wrong.
 
-Heuristic scores are spread thinly across the range, so raising the bar drops traffic off a cliff:
-at 0.95 the heuristics catch one malicious request in 120. The model concentrates its confidence on
-requests that really are attacks, so the same threshold still catches 41. An operator who wants to
-block rather than flag has to run a high threshold, and at that end the model is the difference
-between a usable control and a useless one.
+### The prompt taught the model to copy
 
-## The twelve misses, and why the model does not recover them
+Every few-shot example set its answer within 0.04 of the heuristic score shown in the same envelope
+(0.02 -> 0.05, 0.58 -> 0.62, 0.95 -> 0.97). The model complied to within 0.02 in production, measured
+in [`anomaly-anchoring-probe.csv`](anomaly-anchoring-probe.csv).
 
-Five of the twelve never reach the model at all: they score below the 0.4 gate, so the model's
-ceiling on this dataset is seven. All seven are id-enumeration probing 404s, behavioural rows rather
-than payload rows.
+### The calibration band collided with the decision threshold
 
-The model recognises them. Classifying those seven directly returns verdict `suspicious`, category
-`enumeration`, and reasoning like *"High distinct path count and scripting user agent suggest
-automated enumeration."* That is the correct reading.
+The prompt said `suspicious 0.3-0.7, malicious >= 0.7` and the decision threshold was also 0.7. Any
+request the model judged suspicious was, by construction, below the line that triggers action. The
+seven id-enumeration rows it could have recovered came back `suspicious` at 0.65 to 0.68: the model
+was obeying its instructions exactly.
 
-It then scores them 0.65 to 0.68, just under the line.
+Fixed by asking for a verdict and a confidence and deriving the score in code
+(`CONFIDENCE_SCORE` in `anomaly/llm/provider.ts`), so a confidently suspicious request reaches 0.80
+and clears the flag line while staying under the block line.
 
-### Measured: the model anchors on the score we show it
+### Withholding the heuristic score made it much worse
 
-The envelope includes `heuristics.score`. Classifying the same seven rows twice, once as the gateway
-sends them and once with only that field removed, gives
-[`anomaly-anchoring-probe.csv`](anomaly-anchoring-probe.csv):
+The obvious next step was to stop showing the model the number it was copying. That was tried and
+**recall fell from 0.900 to 0.433.**
 
-| | Model score | Verdict |
-|---|---|---|
-| Heuristic score shown | 0.65 – 0.68, within 0.02 of the heuristic every time | `suspicious` 7/7 |
-| Heuristic score hidden | 0.45 – 0.55, clustered on round numbers | `suspicious` 7/7 |
+Sampling 21 gated rows across the heuristic range explains why: without that field the model answers
+`suspicious / medium` to 17 of them, including SQL injection rows it had scored 0.97 a moment before.
+Its independent judgement on these envelopes is close to constant. The heuristic score was not noise
+the model was lazily copying; it was the best feature it had.
 
-Shown the number, the model reproduces it. Hidden, it falls back to a generic mid-range guess and
-becomes *less* confident, not more. So removing the field does not fix recall; it makes it worse.
+So the score stays in the envelope. The anchoring is real and is left in place.
 
-**The verdict was right in all fourteen classifications while the score was never useful.** The
-pipeline currently enforces on the number alone (`score >= ANOMALY_BLOCK_THRESHOLD` in
-`anomaly.interceptor.ts`), so the one signal this model got consistently right is discarded. Treating
-a `suspicious` verdict as a floor under the score would have caught all seven. That is the change to
-make before reaching for a bigger model, and it is filed for v1.1 rather than done here because it
-alters enforcement semantics and deserves its own eval.
+### The bug that actually mattered
 
-Lowering the decision threshold to 0.6 also recovers all seven without a false positive on this
-dataset, which remains the cheapest lever.
+That failed experiment exposed something worse than anchoring. The gateway took the model's number
+outright, which meant a weak or badly configured model could **lower** a confident heuristic finding
+and silently unflag an attack. A model answering `suspicious / medium` to everything took the whole
+system from 0.900 to 0.433.
+
+`anomaly/combine.ts` now makes the second stage escalate-only:
+
+- any verdict may raise the score, never lower it;
+- `benign` at high confidence may lower it, because that is the one case the model exists for: the
+  named partner key doing a bulk sync that every behavioural signal reads as scraping.
+
+This is what produces the ensemble gain in the table above, and it makes anchoring harmless as a side
+effect. A model that echoes the heuristic score is now a no-op rather than an overwrite.
+
+**The net of all this is that recall at the operating point did not move.** What changed is that
+detection can no longer be degraded by the model, and the block-threshold range got materially
+better. Given that the next step is to plug in models nobody here has tested, a floor at
+heuristics-only is worth more than a point of recall.
 
 ## Latency, and why sync mode cannot use a local 7B
 
@@ -138,3 +145,19 @@ Any OpenAI-compatible endpoint works the same way, for example a free Groq key:
 LLM_API_KEY=... pnpm --filter @omnigate/gateway eval:anomaly -- \
   --provider openai --base-url https://api.groq.com/openai/v1 --model llama-3.3-70b-versatile
 ```
+
+## What these numbers cannot tell you
+
+The dataset is generated by `eval:generate`, a script written alongside the heuristics it evaluates.
+Precision 1.000 on data the project invented is a self-test, not a measurement, and the class balance
+is wrong in a way that flatters everything above: the set is 60 percent malicious where real API
+traffic is nearer 0.1 percent.
+
+At a 0.1 percent base rate, recall 0.900 with a 1 percent false-positive rate gives precision of
+about 8 percent, or eleven false alarms for every real attack. Nothing in this document rules that
+out, because the set contains no hard negatives at all: all 115 gated rows are malicious, so the
+false-positive rate is unmeasured rather than zero.
+
+Closing that needs traffic this project did not write. The plan is the CSIC 2010 HTTP dataset for the
+payload half, replayed access logs and honeypot capture for the behavioural half, and reporting
+precision at a fixed recall plus alerts per million rather than a single operating point.
