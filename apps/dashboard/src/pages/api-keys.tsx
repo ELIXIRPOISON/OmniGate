@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ConfirmDialog } from '@/components/ui/modal';
 import { ProblemAlert } from '@/components/ui/problem-alert';
 import { api } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
@@ -18,6 +19,7 @@ export function ApiKeysPage() {
   const [created, setCreated] = React.useState<{ name: string; rawKey: string } | null>(null);
   const [name, setName] = React.useState('');
   const [error, setError] = React.useState<unknown>(null);
+  const [pending, setPending] = React.useState<{ row: ApiKeyRow; action: 'revoke' | 'rotate' } | null>(null);
 
   const invalidate = () => void queryClient.invalidateQueries({ queryKey: ['api-keys'] });
 
@@ -36,16 +38,26 @@ export function ApiKeysPage() {
     mutationFn: (id: string) =>
       api<ApiKeyRow & { rawKey: string }>(`/admin/v1/api-keys/${id}/rotate`, { method: 'POST' }),
     onSuccess: (key) => {
+      setPending(null);
       setCreated({ name: key.name, rawKey: key.rawKey });
       invalidate();
     },
-    onError: setError,
+    onError: (e) => {
+      setPending(null);
+      setError(e);
+    },
   });
 
   const revoke = useMutation({
     mutationFn: (id: string) => api(`/admin/v1/api-keys/${id}`, { method: 'DELETE' }),
-    onSuccess: invalidate,
-    onError: setError,
+    onSuccess: () => {
+      setPending(null);
+      invalidate();
+    },
+    onError: (e) => {
+      setPending(null);
+      setError(e);
+    },
   });
 
   const columns: Column<ApiKeyRow>[] = [
@@ -96,11 +108,16 @@ export function ApiKeysPage() {
       width: '10rem',
       cell: (row) => (
         <span className="flex justify-end gap-1.5">
-          <Button size="sm" variant="ghost" onClick={() => rotate.mutate(row.id)} disabled={rotate.isPending}>
+          <Button size="sm" variant="ghost" onClick={() => setPending({ row, action: 'rotate' })} disabled={rotate.isPending}>
             <RotateCw className="h-3 w-3" aria-hidden /> Rotate
           </Button>
           {row.status === 'active' && (
-            <Button size="sm" variant="ghost" className="text-critical" onClick={() => revoke.mutate(row.id)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-critical"
+              onClick={() => setPending({ row, action: 'revoke' })}
+            >
               Revoke
             </Button>
           )}
@@ -160,6 +177,34 @@ export function ApiKeysPage() {
           />
         </Card>
       </div>
+
+      <ConfirmDialog
+        key={pending ? `${pending.action}:${pending.row.id}` : 'none'}
+        open={pending !== null}
+        onClose={() => setPending(null)}
+        onConfirm={() => {
+          if (!pending) return;
+          if (pending.action === 'revoke') revoke.mutate(pending.row.id);
+          else rotate.mutate(pending.row.id);
+        }}
+        title={pending?.action === 'revoke' ? `Revoke "${pending.row.name}"?` : `Rotate "${pending?.row.name}"?`}
+        description={
+          pending?.action === 'revoke' ? (
+            <>
+              Anything presenting this key starts getting 401 immediately, and the key cannot be brought
+              back. Rotate instead if you only want to replace the secret.
+            </>
+          ) : (
+            <>
+              A new secret is issued and shown once. The current secret stops working as soon as you
+              confirm, so anything using it must be updated.
+            </>
+          )
+        }
+        confirmLabel={pending?.action === 'revoke' ? 'Revoke key' : 'Rotate key'}
+        confirmWord={pending?.action === 'revoke' ? pending.row.name : undefined}
+        pending={revoke.isPending || rotate.isPending}
+      />
     </>
   );
 }

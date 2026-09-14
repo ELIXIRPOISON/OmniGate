@@ -236,3 +236,18 @@ export function useRoutes() {
     queryFn: () => api<Page<RouteRow>>('/admin/v1/routes', { query: { pageSize: 200 } }),
   });
 }
+
+export interface PolicyRow {
+  id: string;
+  name: string;
+  windowSeconds: number;
+  maxRequests: number;
+  usedBy?: { apiKeys: number; routes: number };
+}
+
+export function usePolicies() {
+  return useQuery({
+    queryKey: ['policies'],
+    queryFn: () => api<Page<PolicyRow>>('/admin/v1/policies', { query: { pageSize: 100 } }),
+  });
+}

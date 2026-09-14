@@ -27,11 +27,28 @@ packages/shared     DTO / contract types shared by both apps
 docs/               PRD, architecture + ADRs, specs, delivery plan, journal
 ```
 
-## Quick start (docker compose)
+## Quick start
+
+One command gives you the whole product, dashboard included, on a single port.
 
 ```bash
-cp .env.example .env
-docker compose up --build -d                 # gateway :8080, mock upstream :3001, redis, postgres
+cp .env.example .env                                                  # set the four secrets it asks for
+docker compose -f compose.prod.yml up --build -d                      # gateway + dashboard :8080, redis, postgres
+docker compose -f compose.prod.yml exec gateway node dist/prisma/seed.js   # prints a demo API key ONCE
+open http://localhost:8080                                            # sign in with ADMIN_EMAIL / ADMIN_PASSWORD
+```
+
+The gateway serves the built dashboard itself, so there is no second server to start and no CORS to
+configure. `sh tools/smoke-prod.sh $KEY` checks the whole thing end to end: proxying, auth, rate
+limiting, the admin API and the dashboard.
+
+For development, `compose.yml` runs the gateway with a bind mount and `pnpm dev:dashboard` serves the
+UI on :5173 with hot reload, proxying the control plane to :8080.
+
+## Trying the gateway from the command line
+
+```bash
+docker compose up --build -d                 # dev stack: gateway :8080, mock upstream :3001, redis, postgres
 docker compose exec gateway pnpm seed        # creates admin, policies, routes and prints a demo API key ONCE
 export KEY=gw_live_...                       # paste the key from the seed output
 

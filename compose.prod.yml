@@ -1,0 +1,114 @@
+# Production stack: the built image, Postgres and Redis. Use this to smoke-test the image that gets
+# deployed, and as the one-command way to run the whole product locally.
+#
+#   docker compose -f compose.prod.yml up --build -d
+#   docker compose -f compose.prod.yml exec gateway node dist/prisma/seed.js   # prints a demo API key once
+#   open http://localhost:8080
+#
+# Unlike compose.yml there are no bind mounts and no dev server: the gateway serves the built
+# dashboard itself, so the whole product is on port 8080.
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: omnigate:local
+    restart: unless-stopped
+    ports:
+      - '8080:8080'
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      PORT: 8080
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: postgresql://omnigate:omnigate@postgres:5432/omnigate
+      REDIS_URL: redis://redis:6379
+      MOCK_UPSTREAM_URL: http://mock-upstream:3001
+      ROUTES_FILE: ./routes.yaml
+      ALLOW_PRIVATE_UPSTREAMS: 'true'
+      # Off in production: the score is an internal signal, not something callers should see.
+      EXPOSE_ANOMALY_SCORE: 'false'
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env, 32+ random bytes}
+      API_KEY_PEPPER: ${API_KEY_PEPPER:?set API_KEY_PEPPER in .env}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:?set ADMIN_JWT_SECRET in .env, must differ from JWT_SECRET}
+      LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      ANOMALY_AUTO_THROTTLE: ${ANOMALY_AUTO_THROTTLE:-false}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      mock-upstream:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8080/readyz']
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+
+  # Applies migrations and exits. The gateway waits for it, so the runtime image never needs the
+  # Prisma CLI. On Fly this is the release command instead.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrate
+    image: omnigate-migrate:local
+    environment:
+      DATABASE_URL: postgresql://omnigate:omnigate@postgres:5432/omnigate
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  mock-upstream:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    command: >
+      sh -c "pnpm --filter @omnigate/mock-upstream build
+      && pnpm --filter @omnigate/mock-upstream start"
+    environment:
+      PORT: 3001
+    expose:
+      - '3001'
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: omnigate
+      POSTGRES_PASSWORD: omnigate
+      POSTGRES_DB: omnigate
+    volumes:
+      - pgdata-prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U omnigate -d omnigate']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pgdata-prod:

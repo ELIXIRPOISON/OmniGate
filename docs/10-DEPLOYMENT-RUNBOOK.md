@@ -2,45 +2,57 @@
 
 **When to use:** first production deploy (Sprint 9) and every release after. **Prereqs:** Docker 27+, `flyctl` logged in, repo secrets set, CI green on `main`.
 
-## 1. Dockerfile (`apps/gateway/Dockerfile`, build context = repo root)
-```dockerfile
-# ---- deps ----
-FROM node:22-alpine AS deps
-RUN corepack enable
-WORKDIR /repo
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
-COPY apps/gateway/package.json apps/gateway/
-COPY apps/dashboard/package.json apps/dashboard/
-COPY packages/shared/package.json packages/shared/
-RUN pnpm install --frozen-lockfile
+## 1. Image (`Dockerfile`, build context = repo root)
 
-# ---- build ----
-FROM deps AS build
-COPY . .
-RUN pnpm --filter @omnigate/shared build \
- && pnpm --filter @omnigate/dashboard build \
- && pnpm --filter @omnigate/gateway prisma generate \
- && pnpm --filter @omnigate/gateway build \
- && pnpm --filter @omnigate/gateway deploy --prod /out
+The real Dockerfile lives at the repo root. It is multi-stage and three things about it are load
+bearing.
 
-# ---- runtime ----
-FROM node:22-alpine AS runtime
-RUN addgroup -S app && adduser -S app -G app
-WORKDIR /app
-COPY --from=build --chown=app:app /out ./
-COPY --from=build --chown=app:app /repo/apps/dashboard/dist ./public/dashboard
-USER app
-ENV NODE_ENV=production PORT=8080
-EXPOSE 8080
-HEALTHCHECK --interval=15s --timeout=3s --retries=3 CMD wget -qO- http://127.0.0.1:8080/healthz || exit 1
-CMD ["node", "dist/main.js"]
+**The dashboard ships inside the gateway image.** Stage `build` runs the Vite build and the runtime
+stage copies `apps/dashboard/dist` to `public/dashboard`, where `app.setup.ts` serves it. A deploy is
+therefore one container, not a stack, and `docker compose -f compose.prod.yml up` gives a reviewer
+the whole product on one port.
+
+**The Prisma CLI never reaches the runtime image.** `@prisma/client` declares `prisma` and
+`typescript` as *optional* peer dependencies and pnpm installs optional peers, which drags in
+Prisma Studio, pglite, effect and elkjs: about 190 MB of build-time code. `auto-install-peers=false`
+is not available because a frozen install refuses to disagree with the setting recorded in the
+lockfile, so the `proddeps` stage removes them after installing. The gateway reaches Postgres through
+`@prisma/adapter-pg` and the generated client is plain compiled TypeScript, so nothing there is
+loaded at run time.
+
+**Migrations run from their own stage.** `--target migrate` builds a one-shot container whose only
+job is `prisma migrate deploy`. In compose the gateway waits on it with
+`condition: service_completed_successfully`; on Fly it is the release command.
+
+```bash
+docker build -t omnigate .                            # runtime image
+docker build -t omnigate-migrate --target migrate .    # migration runner
+sh tools/smoke-prod.sh "$KEY"                          # end-to-end check against the running image
 ```
-Target image < 250 MB. Verify with `docker image ls`.
+
+### Measured size
+
+| | |
+|---|---|
+| Before pruning | 742 MB |
+| After removing the Prisma CLI and its tree | 505 MB |
+| After dropping unused query compilers, React and `@prisma/dev` | **392 MB** |
+
+`docs/08` set a target of under 250 MB. That is not reachable on this stack and the target should be
+read as stale rather than missed: `node:22-alpine` is 171 MB before a single dependency is installed,
+and Prisma 7 ships a WebAssembly query compiler per database engine in two size variants as both CJS
+and ESM. Keeping only the PostgreSQL compilers takes `@prisma/client` from 71 MB to about 19 MB,
+which is the last large win available without leaving Alpine or vendoring the client.
 
 ## 2. Compose files
-`compose.yml` (dev): gateway (bind-mounted, `pnpm start:dev`), mock-upstream, redis:7-alpine (`--maxmemory 256mb --maxmemory-policy allkeys-lru`), postgres:16-alpine with named volume, dashboard (Vite).
-`compose.prod.yml`: built gateway image + redis + postgres — used to smoke-test the production image locally before `fly deploy`.
-`compose.test.yml`: same as prod + seeded data, used by Playwright.
+
+`compose.yml` (dev): gateway bind-mounted running `start:dev`, mock-upstream, redis:7-alpine
+(`--maxmemory 256mb --maxmemory-policy allkeys-lru`), postgres:16-alpine with a named volume. The
+dashboard is not in this file; run `pnpm dev:dashboard` for hot reload.
+
+`compose.prod.yml`: the built image plus a `migrate` service that runs to completion first, redis and
+postgres. This is both the local smoke test of the deployable image and the one-command way to run
+the whole product.
 
 ## 3. Environment variables (`.env.example`)
 | Var | Required | Default | Purpose |
