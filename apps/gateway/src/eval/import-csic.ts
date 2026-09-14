@@ -29,9 +29,11 @@ import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { scoreHeuristics } from '../anomaly/heuristics.js';
-import { parameterNames } from '../anomaly/params.js';
+import { parameterFields, parameterNames } from '../anomaly/params.js';
 import {
   unknownParamSignal,
+  valueShapeSignal,
+  shapeOf,
   type RouteSchema,
   type SchemaConfig,
 } from '../anomaly/schema.service.js';
@@ -150,7 +152,12 @@ export function learnSchema(
       contentType: req.headers['content-type'] ?? 'application/x-www-form-urlencoded',
     });
     if (!schemas.has(path))
-      schemas.set(path, { known: new Set(), observations: 0, unbounded: false });
+      schemas.set(path, {
+        known: new Set(),
+        shapes: new Map(),
+        observations: 0,
+        unbounded: false,
+      });
     const schema = schemas.get(path)!;
     schema.observations++;
     if (schema.unbounded) continue;
@@ -172,6 +179,21 @@ export function learnSchema(
       schema.known.add(name);
       perPath.delete(name);
     }
+
+    if (!config.valueShapes) continue;
+    for (const { name, value } of parameterFields({
+      query,
+      bodyText: req.body || null,
+      contentType:
+        req.headers['content-type'] ?? 'application/x-www-form-urlencoded',
+    })) {
+      if (!schema.known.has(name)) continue;
+      const current = schema.shapes.get(name) ?? { shapes: 0, maxLength: 0 };
+      schema.shapes.set(name, {
+        shapes: current.shapes | (1 << shapeOf(value)),
+        maxLength: Math.max(current.maxLength, value.length),
+      });
+    }
   }
   return schemas;
 }
@@ -189,10 +211,11 @@ export function toEvalRow(
 
   const schema = schemas?.get(path) ?? {
     known: new Set<string>(),
+    shapes: new Map(),
     observations: 0,
     unbounded: false,
   };
-  const names = parameterNames({
+  const fields = parameterFields({
     query,
     bodyText,
     contentType: req.headers['content-type'] ?? 'application/x-www-form-urlencoded',
@@ -207,7 +230,16 @@ export function toEvalRow(
     userAgent: userAgent ?? undefined,
     routeMethods: ROUTE_METHODS,
     unknownParam:
-      schemas && config ? unknownParamSignal(names, schema, config) : 0,
+      schemas && config
+        ? Math.max(
+            unknownParamSignal(
+              fields.map((f) => f.name),
+              schema,
+              config,
+            ),
+            valueShapeSignal(fields, schema, config),
+          )
+        : 0,
     stats: { ...NEUTRAL_STATS },
   });
 
@@ -252,6 +284,8 @@ async function main(): Promise<void> {
       stride: { type: 'string' },
       /** Skip schema learning, to measure the pattern signals on their own. */
       'no-schema': { type: 'boolean' },
+      /** Also learn and check value shapes (SCHEMA_VALUE_SHAPES). */
+      'value-shapes': { type: 'boolean' },
     },
   });
 
@@ -265,6 +299,7 @@ async function main(): Promise<void> {
     warmupRequests: 500,
     promotePrincipals: 3,
     maxNames: 256,
+    valueShapes: values['value-shapes'] === true,
   };
 
   const read = async (name: string): Promise<RawRequest[]> =>

@@ -11,6 +11,9 @@ Five lines a day: done / blocked / decided. Newest first.
 - The eval applies the promotion rule exactly as the gateway does, which is why it scores 0.494 rather than the 0.504 an idealised learner reaches. Worth the two points to measure the real thing.
 - Noticed in the sweep: a cliff at threshold 0.9. Above the schema signal's own weight the detector silently falls back to patterns alone and recall drops to 0.210. Anyone raising the threshold that far is turning off the strongest signal without meaning to; documented.
 - Caveat that matters: CSIC's app has 28 paths and 42 parameter names. Real APIs are larger and churn more, so zero false positives is optimistic. None of the safeguards can be tested against CSIC either, because it has no timeline, no deployments and no attacker arriving mid-learning. That is the honeypot argument.
+- Done (2.2): value shapes. Per known parameter the schema also records the kinds of value it has carried, as a four-bit character-class signature, plus the longest one seen. Recall 0.494 -> 0.772 held out, and it is the first signal in the gateway with a false-positive count that is not zero: 28 of 36,000.
+- Decided: off by default. Precision 0.999 reads as free and is not. At one attack per thousand requests it takes precision from 0.856 to 0.498, so enabling it roughly doubles detection and makes the queue a coin flip. That is the operator's trade, and the numbers are written down rather than a default picked for them.
+- Shapes are only learned for names already promoted, so a parameter cannot have a value profile before the route admits its name. That costs about twelve points against an unconstrained learner - 0.772 where the 40-line probe reached 0.891 - and the safety is worth more than the twelve points.
 - Next: behavioural half still unmeasured. Then Sprint 9.
 
 ## 2026-09-14 (Mon, late) - Phase 1: the evaluation was a self-test, and the real number is 0.210

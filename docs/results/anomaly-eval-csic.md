@@ -21,14 +21,17 @@ committed; the importer and the mirror it comes from are.
 | Detector | Recall | FP / 36,000 benign | Precision |
 |---|---|---|---|
 | Pattern and behavioural signals | 0.210 | 0 | 1.000 |
-| **+ learned parameter schema** | **0.494** | **0** | **1.000** |
+| **+ learned parameter names** (default) | **0.494** | **0** | **1.000** |
+| + learned value shapes (opt in) | **0.772** | 28 | 0.999 |
 
 Learning which parameter names each route accepts, 42 names across 28 paths, more than doubles
 recall at no measurable cost in false positives. It detects more on its own than all eight of the
-original signals combined.
+original signals combined. Learning what those parameters normally *contain* adds another 28 points
+of recall, and is the first signal in the gateway to cost anything.
 
-It also unblocks the model. Gated attacks go from 6,171 to 13,114, so the ceiling on what the
-classification stage can ever contribute rises from 24.6 to 52.3 percent.
+It also unblocks the model. Gated attacks go from 6,171 to 13,114 with names, and 19,672 with
+shapes, so the ceiling on what the classification stage can ever contribute rises from 24.6 percent
+to 52.3 and then 78.5.
 
 ## The original finding
 
@@ -220,6 +223,40 @@ Almost all of the work is in not making it dangerous:
 
 The eval applies the promotion rule exactly as the gateway does, which is why it scores 0.494 rather
 than the 0.504 an idealised "any name seen once" learner reaches.
+
+### Value shapes, and why they are off by default
+
+Per known parameter, the schema also records the *kinds* of value it has carried, as a four-bit
+character-class signature, and the longest one seen. A value whose class the parameter has never
+carried, or one far longer than anything before it, is flagged.
+
+It is the largest single recall gain available and the first signal with a false-positive count that
+is not zero:
+
+| | Recall | FP / 36,000 | Precision |
+|---|---|---|---|
+| Names only | 0.494 | 0 | 1.000 |
+| Names + value shapes | 0.772 | 28 | 0.999 |
+
+Precision 0.999 sounds free. At realistic base rates it is not:
+
+| Base rate | Names only | Names + shapes |
+|---|---|---|
+| 1% | 0.984 | 0.909 |
+| 0.1% | **0.856** | **0.498** |
+| 0.01% | 0.372 | 0.090 |
+
+At one attack in a thousand requests, turning shapes on takes recall from 0.494 to 0.772 and
+precision from 0.856 to a coin flip. That is a real trade rather than an upgrade, so the operator
+makes it: `SCHEMA_VALUE_SHAPES`, off unless set. Worth turning on where missing an attack costs more
+than chasing a false one, and where somebody is actually reading the queue.
+
+The class signature is deliberately coarse, four bits. Finer representations were not tried, and a
+better one is the obvious place to look for the same recall at lower cost.
+
+Shapes are only learned for names already promoted, so a parameter cannot have a value profile
+before the route admits the name. That is why this scores 0.772 where an unconstrained learner
+reaches 0.891: the safety rules cost about twelve points of recall, and they are worth it.
 
 ### What it does not tell us
 

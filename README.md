@@ -128,12 +128,18 @@ with the parameter schema learned from a training corpus and every scored reques
 | Detector | Recall | False positives | Precision |
 |---|---|---|---|
 | Eight pattern and behavioural signals | 0.210 | 0 / 36,000 | 1.000 |
-| **+ learned route schema** | **0.494** | **0 / 36,000** | **1.000** |
+| **+ learned parameter names** (default) | **0.494** | **0 / 36,000** | **1.000** |
+| + learned value shapes (opt in) | 0.772 | 28 / 36,000 | 0.999 |
 
 The strongest signal in the gateway is the cheapest: knowing which parameter names each route
 legitimately accepts, learned from traffic. On its own it detects more than all eight of the original
 signals combined. `idA=1` where the route only ever accepts `id` is invisible to any pattern and
 obvious to a schema.
+
+Learning what those parameters normally contain adds another 28 points of recall and is the first
+signal here that costs anything: at one attack per thousand requests it trades precision 0.856 for
+0.498. That is a decision rather than an upgrade, so it is off unless `SCHEMA_VALUE_SHAPES` is set,
+with the numbers written down rather than a default chosen on your behalf.
 
 Learning is the part that needs care, and most of the code is safeguards: only 2xx responses that the
 inline pass found unremarkable widen a schema, a new parameter needs several distinct callers before

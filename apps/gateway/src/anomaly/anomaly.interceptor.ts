@@ -16,10 +16,11 @@ import type { Env } from '../config/env.js';
 import type { RouteConfig } from '../config/routes.js';
 import { rateLimitKey, resolvePolicy } from '../rate-limit/policy.js';
 import { combineScores } from './combine.js';
-import { parameterNames } from './params.js';
+import { parameterFields } from './params.js';
 import {
   RouteSchemaService,
   unknownParamSignal,
+  valueShapeSignal,
   EMPTY_SCHEMA,
 } from './schema.service.js';
 import { BodyTooLargeError, hasBody, readRawBody } from './body.js';
@@ -113,9 +114,10 @@ export class AnomalyInterceptor implements NestInterceptor {
       warmupRequests: this.env.SCHEMA_WARMUP_REQUESTS,
       promotePrincipals: this.env.SCHEMA_PROMOTE_PRINCIPALS,
       maxNames: this.env.SCHEMA_MAX_NAMES,
+      valueShapes: this.env.SCHEMA_VALUE_SHAPES,
     };
-    const names = this.env.SCHEMA_LEARNING
-      ? parameterNames({
+    const fields = this.env.SCHEMA_LEARNING
+      ? parameterFields({
           query,
           bodyText,
           contentType: req.headers['content-type'],
@@ -131,7 +133,7 @@ export class AnomalyInterceptor implements NestInterceptor {
         rateLimitKey: rateLimitKey(policy.id, who),
       }),
       this.env.SCHEMA_LEARNING
-        ? this.schema.read(route.service)
+        ? this.schema.read(route.service, this.env.SCHEMA_VALUE_SHAPES)
         : Promise.resolve(EMPTY_SCHEMA),
     ]);
     const userAgent = redactUserAgent(req.headers['user-agent']);
@@ -143,7 +145,14 @@ export class AnomalyInterceptor implements NestInterceptor {
       bodyBytes: body.length,
       userAgent,
       routeMethods: route.methods,
-      unknownParam: unknownParamSignal(names, schema, schemaConfig),
+      unknownParam: Math.max(
+        unknownParamSignal(
+          fields.map((f) => f.name),
+          schema,
+          schemaConfig,
+        ),
+        valueShapeSignal(fields, schema, schemaConfig),
+      ),
       stats: { ...stats, policyMax: policy.maxRequests },
     });
 
@@ -167,13 +176,13 @@ export class AnomalyInterceptor implements NestInterceptor {
         this.env.SCHEMA_LEARNING &&
         res.statusCode < 400 &&
         heuristic.score < this.env.ANOMALY_GATE_THRESHOLD &&
-        names.length > 0
+        fields.length > 0
       ) {
         void this.schema
           .observe({
             route: route.service,
             principal: who,
-            names,
+            fields,
             config: schemaConfig,
           })
           .catch(() => undefined);

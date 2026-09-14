@@ -54,6 +54,12 @@ export const envSchema = z
     SCHEMA_PROMOTE_PRINCIPALS: int().positive().default(3),
     /** Past this many names a route is treated as unmodellable and the signal disables itself. */
     SCHEMA_MAX_NAMES: int().positive().default(256),
+    /**
+     * Also check that values look like what the parameter has carried before. Off by default: it is
+     * the largest single recall gain available and the only signal with a non-zero false-positive
+     * count, so it is the operator's trade to make (docs/results/anomaly-eval-csic.md).
+     */
+    SCHEMA_VALUE_SHAPES: bool().default(false),
     LLM_PROVIDER: z
       .enum(['openai', 'anthropic', 'local', 'fake'])
       .default('openai'),
