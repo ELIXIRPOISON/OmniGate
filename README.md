@@ -2,17 +2,33 @@
 
 # OmniGate - AI-powered API Gateway
 
-> A self-hosted gateway that fronts your microservices with JWT/API-key auth, Redis-backed rate limiting and caching, LLM-assisted anomaly detection, and a real-time React dashboard.
+> A self-hosted API gateway: one entry point in front of your services, with auth, rate limiting,
+> caching, learned anomaly detection and a dashboard, in a single container.
 
-**Status:** Sprint 8 of 9 (kickoff 7 Sep 2026, v1.0 target 6 Nov 2026). The backend is complete: routing, proxying, JWT and API-key auth, rate limiting, response cache, anomaly detection with enforcement, a partitioned audit log and the full admin API. The React dashboard is in place: overview, traffic, anomaly review, keys, routes and a log explorer. Nothing is deployed yet.
-**Stack:** NestJS 12 (Express) · Redis 7 · PostgreSQL 16 + Prisma · BullMQ · React 19 + Vite · TypeScript 6 · Docker
+**Stack:** NestJS 12 (Express) · Redis 7 · PostgreSQL 16 + Prisma 7 · BullMQ · React 19 + Vite ·
+TypeScript 6 · Docker
 
-## Request lifecycle
+Detection is measured against an independent benchmark rather than a dataset this project wrote:
+**recall 0.494 at precision 1.000 on CSIC 2010**, zero false positives across 36,000 held-out benign
+requests. One command gets you the whole thing, dashboard included, on port 8080.
 
-`X-Request-Id` → route resolve → auth (JWT | API key) → rate limit (Redis Lua sliding window) → cache (GET) → heuristic anomaly score → proxy → buffered audit write.
-LLM classification runs off the hot path by default; routes can opt into synchronous blocking with an 800 ms fail-open timeout.
+## Architecture
 
-Full design: [`docs/02-ARCHITECTURE.md`](docs/02-ARCHITECTURE.md). Start with [`docs/00-INDEX.md`](docs/00-INDEX.md).
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.svg">
+  <img src="docs/assets/architecture-light.svg" alt="OmniGate architecture: client, data plane pipeline, upstreams, shared state, the off-hot-path work and the control plane" width="100%">
+</picture>
+
+`X-Request-Id` → route resolve → auth (JWT | API key) → rate limit (Redis Lua sliding window) →
+cache (GET) → anomaly screen → proxy. Everything slower than a millisecond happens after the
+response has been sent: classification, enforcement bookkeeping and the buffered audit write.
+
+Auth and rate limiting are the only stages that fail closed. Everything else degrades: Redis down
+means no limits and no cache rather than no service, and a model that times out or errors allows the
+request.
+
+Full design: [`docs/02-ARCHITECTURE.md`](docs/02-ARCHITECTURE.md). Start with
+[`docs/00-INDEX.md`](docs/00-INDEX.md).
 
 ## Production hardening
 

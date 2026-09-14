@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1060 528" width="1060" height="528" role="img" aria-label="OmniGate architecture">
+  <defs>
+    <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L8 4 L0 8 z" fill="#71717a"/>
+    </marker>
+    <marker id="arrowBrand" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L8 4 L0 8 z" fill="#1a56f0"/>
+    </marker>
+    <marker id="arrowAccent" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L8 4 L0 8 z" fill="#eb6834"/>
+    </marker>
+  </defs>
+  <rect width="1060" height="528" fill="#ffffff"/>
+  <text x="32" y="40" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="19" font-weight="700" fill="#18181b" text-anchor="start">OmniGate</text>
+  <text x="146" y="40" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#71717a" text-anchor="start">one entry point in front of N services</text>
+  <rect x="148" y="72" width="764" height="132" rx="12" fill="#fafafa" stroke="#e4e4e7" stroke-width="1"/>
+  <text x="164" y="92" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="9.5" font-weight="700" fill="#71717a" text-anchor="start">DATA PLANE</text>
+  <text x="240" y="92" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="9.5" font-weight="400" fill="#71717a" text-anchor="start">every stage fails open except auth and rate limit</text>
+  <rect x="164" y="106" width="100" height="54" rx="8" fill="#ffffff" stroke="#e4e4e7" stroke-width="1"/>
+  <text x="214" y="128" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#18181b" text-anchor="middle">request id</text>
+  <text x="214" y="145" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="10.5" font-weight="400" fill="#71717a" text-anchor="middle">X-Request-Id</text>
+  <rect x="272" y="106" width="100" height="54" rx="8" fill="#ffffff" stroke="#e4e4e7" stroke-width="1"/>
+  <text x="322" y="128" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#18181b" text-anchor="middle">route</text>
+  <text x="322" y="145" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="10.5" font-weight="400" fill="#71717a" text-anchor="middle">db + routes.yaml</text>
+  <path d="M263 133 L270 133" stroke="#71717a" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <rect x="380" y="106" width="100" height="54" rx="8" fill="#ffffff" stroke="#e4e4e7" stroke-width="1"/>
+  <text x="430" y="128" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#18181b" text-anchor="middle">auth</text>
+  <text x="430" y="145" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="10.5" font-weight="400" fill="#71717a" text-anchor="middle">JWT / API key</text>
+  <path d="M371 133 L378 133" stroke="#71717a" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <rect x="488" y="106" width="100" height="54" rx="8" fill="#ffffff" stroke="#e4e4e7" stroke-width="1"/>
+  <text x="538" y="128" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#18181b" text-anchor="middle">rate limit</text>
+  <text x="538" y="145" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="10.5" font-weight="400" fill="#71717a" text-anchor="middle">Redis Lua</text>
+  <path d="M479 133 L486 133" stroke="#71717a" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <rect x="596" y="106" width="100" height="54" rx="8" fill="#ffffff" stroke="#e4e4e7" stroke-width="1"/>
+  <text x="646" y="128" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#18181b" text-anchor="middle">cache</text>
+  <text x="646" y="145" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="10.5" font-weight="400" fill="#71717a" text-anchor="middle">GET, TTL</text>
+  <path d="M587 133 L594 133" stroke="#71717a" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <rect x="704" y="106" width="100" height="54" rx="8" fill="#eef3ff" stroke="#1a56f0" stroke-width="1"/>
+  <text x="754" y="128" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#1a56f0" text-anchor="middle">screen</text>
+  <text x="754" y="145" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="10.5" font-weight="400" fill="#71717a" text-anchor="middle">9 signals</text>
+  <path d="M695 133 L702 133" stroke="#71717a" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <rect x="812" y="106" width="100" height="54" rx="8" fill="#ffffff" stroke="#e4e4e7" stroke-width="1"/>
+  <text x="862" y="128" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#18181b" text-anchor="middle">proxy</text>
+  <text x="862" y="145" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="10.5" font-weight="400" fill="#71717a" text-anchor="middle">streams body</text>
+  <path d="M803 133 L810 133" stroke="#71717a" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <text x="164" y="192" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#71717a" text-anchor="start">sub-millisecond inline; anything slower happens after the response</text>
+  <rect x="24" y="106" width="104" height="54" rx="8" fill="#ffffff" stroke="#e4e4e7" stroke-width="1"/>
+  <text x="76" y="129" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#18181b" text-anchor="middle">Client</text>
+  <text x="76" y="146" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="10" font-weight="400" fill="#71717a" text-anchor="middle">/api/{service}</text>
+  <path d="M128 133 L146 133" stroke="#71717a" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <rect x="932" y="106" width="104" height="54" rx="8" fill="#ffffff" stroke="#e4e4e7" stroke-width="1"/>
+  <text x="984" y="129" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#18181b" text-anchor="middle">Upstreams</text>
+  <text x="984" y="146" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#71717a" text-anchor="middle">your services</text>
+  <path d="M914 133 L930 133" stroke="#71717a" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <text x="148" y="228" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="9.5" font-weight="700" fill="#71717a" text-anchor="start">STATE</text>
+  <text x="196" y="228" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="9.5" font-weight="400" fill="#71717a" text-anchor="start">shared by the stages above</text>
+  <rect x="148" y="236" width="380" height="52" rx="8" fill="#f4f4f5" stroke="#e4e4e7" stroke-width="1"/>
+  <text x="162" y="257" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#18181b" text-anchor="start">Redis</text>
+  <text x="162" y="274" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#71717a" text-anchor="start">limits · cache · sender stats · learned route schema</text>
+  <rect x="540" y="236" width="372" height="52" rx="8" fill="#f4f4f5" stroke="#e4e4e7" stroke-width="1"/>
+  <text x="554" y="257" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#18181b" text-anchor="start">PostgreSQL</text>
+  <text x="554" y="274" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#71717a" text-anchor="start">routes · keys · anomaly events · partitioned audit log</text>
+  <path d="M338 204 L338 234" stroke="#e4e4e7" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M726 204 L726 234" stroke="#e4e4e7" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <text x="148" y="328" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="9.5" font-weight="700" fill="#eb6834" text-anchor="start">OFF THE HOT PATH</text>
+  <text x="262" y="328" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="9.5" font-weight="400" fill="#71717a" text-anchor="start">the response has already been sent</text>
+  <rect x="148" y="336" width="178" height="52" rx="8" fill="#fef1eb" stroke="#eb6834" stroke-width="1"/>
+  <text x="237" y="357" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#18181b" text-anchor="middle">queue</text>
+  <text x="237" y="374" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#71717a" text-anchor="middle">BullMQ, gated + sampled</text>
+  <rect x="342" y="336" width="200" height="52" rx="8" fill="#fef1eb" stroke="#eb6834" stroke-width="1"/>
+  <text x="442" y="357" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#18181b" text-anchor="middle">classify</text>
+  <text x="442" y="374" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#71717a" text-anchor="middle">any OpenAI-compatible model</text>
+  <path d="M326 362 L340 362" stroke="#eb6834" stroke-width="1.5" fill="none" marker-end="url(#arrowAccent)"/>
+  <rect x="558" y="336" width="222" height="52" rx="8" fill="#fef1eb" stroke="#eb6834" stroke-width="1"/>
+  <text x="669" y="357" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#18181b" text-anchor="middle">escalate only</text>
+  <text x="669" y="374" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#71717a" text-anchor="middle">may raise a score, never lower it</text>
+  <path d="M542 362 L556 362" stroke="#eb6834" stroke-width="1.5" fill="none" marker-end="url(#arrowAccent)"/>
+  <rect x="796" y="336" width="168" height="52" rx="8" fill="#fef1eb" stroke="#eb6834" stroke-width="1"/>
+  <text x="880" y="357" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#18181b" text-anchor="middle">audit writer</text>
+  <text x="880" y="374" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#71717a" text-anchor="middle">buffered, batched inserts</text>
+  <path d="M754 160 V212 H132 V362 H146" stroke="#eb6834" stroke-width="1.5" fill="none" stroke-dasharray="4 3" marker-end="url(#arrowAccent)" stroke-linejoin="round"/>
+  <path d="M862 160 V212 H972 V362 H966" stroke="#eb6834" stroke-width="1.5" fill="none" stroke-dasharray="4 3" marker-end="url(#arrowAccent)" stroke-linejoin="round"/>
+  <text x="136" y="228" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="9.5" font-weight="400" fill="#eb6834" text-anchor="end">suspicious</text>
+  <text x="1044" y="228" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="9.5" font-weight="400" fill="#eb6834" text-anchor="end">every request</text>
+  <text x="148" y="428" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="9.5" font-weight="700" fill="#1a56f0" text-anchor="start">CONTROL PLANE</text>
+  <rect x="148" y="436" width="560" height="58" rx="10" fill="#eef3ff" stroke="#1a56f0" stroke-width="1"/>
+  <text x="166" y="459" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#1a56f0" text-anchor="start">Dashboard + Admin API</text>
+  <text x="690" y="459" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="11" font-weight="400" fill="#1a56f0" text-anchor="end">/admin/v1</text>
+  <text x="166" y="478" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="10.5" font-weight="400" fill="#71717a" text-anchor="start">routes · keys · policies · logs · anomaly review, served by the gateway itself</text>
+  <rect x="724" y="436" width="188" height="58" rx="10" fill="#ffffff" stroke="#e4e4e7" stroke-width="1"/>
+  <text x="742" y="459" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="12" font-weight="600" fill="#18181b" text-anchor="start">GET /metrics</text>
+  <text x="742" y="478" font-family="ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#71717a" text-anchor="start">Prometheus, bounded labels</text>
+</svg>

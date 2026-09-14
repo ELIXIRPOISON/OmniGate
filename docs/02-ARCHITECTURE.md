@@ -1,5 +1,13 @@
 # 02 · Architecture & Design Decisions
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/architecture-dark.svg">
+  <img src="assets/architecture-light.svg" alt="OmniGate architecture" width="100%">
+</picture>
+
+*Regenerate with `node tools/make-architecture-diagram.mjs`; both themes come from that one file.*
+
+
 ## 1. Context and constraints
 - Solo developer, 9 weeks, existing NestJS/React skills.
 - Must run locally with one command and deploy as a single container + managed data stores.

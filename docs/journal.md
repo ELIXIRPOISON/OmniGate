@@ -2,6 +2,17 @@
 
 Five lines a day: done / blocked / decided. Newest first.
 
+## 2026-09-15 (Tue) - Sprint 9: hardening, metrics, diagram, v1.0
+
+- Done: S9-03 hardening. Refuses to boot in production on any value .env.example ships with. Proved by the guard stopping this repo's own prod stack until real secrets were generated. Security headers cover the dashboard and control plane and deliberately not /api - a gateway that rewrites an upstream's CSP breaks the app it is meant to be transparent to, and the smoke test asserts a proxied response comes back untouched.
+- The CSP detail worth keeping: the dashboard's one inline script is the theme guard that runs before first paint, so it cannot move to a file. Its sha256 is computed from the built index.html at boot rather than written down, because a constant stops matching the day someone edits that script and the failure is a blocked script in production, not a failing test.
+- Done: S9-04 /metrics. Written rather than pulled in - the exposition format is a dozen rules, we need four counters and two histograms, and a dependency lands in the image Sprint 9 spent real effort shrinking. metrics.spec.ts pins the format: cumulative buckets, +Inf equal to _count, escaped labels, trailing newline. Needs METRICS_TOKEN; unset serves in development and 404s in production.
+- Done: S9-05 architecture diagram, generated for both colour schemes from one script so the pair cannot drift, embedded with <picture> so GitHub picks. First layout had seven elbows crossing the boxes; the honest statement was "the stages share this state" and one strip says it better than seven lines.
+- Done: S9-06 CHANGELOG, including a known-limitations section that says the behavioural signals are unmeasured and the feature the project is named for is a rounding error.
+- Done: S9-07 retro. The uncomfortable entry: the evaluation was a self-test and nobody noticed for three sprints. Recall 0.900 on our own data, 0.065 on CSIC. Everything downstream of that number was tuned against fiction. One line in docs/09 requiring a dataset the project did not write would have changed three sprints.
+- Not done: S9-02 deploy. Needs an account only the owner can create.
+- Next: tag v1.0.0, then the honeypot, which is items 1 and 2 of the v1.1 backlog and worth more than the rest combined.
+
 ## 2026-09-14 (Mon, very late) - Phase 2: the cheapest signal is the strongest
 
 - Done: the gateway learns a per-route parameter schema and `unknown_param` fires on names a route has never legitimately accepted. Held out properly - schema learned from `normalTrafficTraining`, every scored row from the test files. Recall 0.210 -> 0.494 with false positives still 0 of 36,000.

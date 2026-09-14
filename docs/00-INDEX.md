@@ -26,6 +26,8 @@ Read in this order on day 1, then keep `08-DELIVERY-PLAN.md` open every day.
 | 10 | **DEPLOYMENT-RUNBOOK** | Docker, compose, env vars, deploy + rollback checklist | Sprint 9 (skim in Sprint 1) |
 | 11 | **SECURITY-THREAT-MODEL** | Threats and mitigations per phase | Sprint 1, revisit Sprint 5 |
 | 12 | **README-TEMPLATE** | The public README you'll ship with the repo | Sprint 9 |
+| 13 | **DESIGN-SYSTEM** | Tokens, chart colour and how it was validated | Sprint 8 |
+| 14 | **RETRO** | What the plan got wrong, and the v1.1 backlog | Sprint 9 |
 
 ---
 
