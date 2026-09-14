@@ -122,7 +122,13 @@ pnpm --filter @omnigate/gateway eval:anomaly -- --provider fake
 pnpm --filter @omnigate/gateway eval:anomaly -- --provider local --model qwen2.5:7b
 ```
 
-Results and the threshold sweep live in [`docs/results/anomaly-eval.md`](docs/results/anomaly-eval.md).
+The shipped numbers come from `qwen2.5:7b` on Ollama, 115 calls and no failures. At the default 0.7
+threshold the model changes no decision: heuristics alone already give precision 1.000 and recall
+0.900 on this set. What it changes is how much the threshold matters, holding recall 0.342 at 0.95
+where the heuristics fall to 0.008. Measured latency is 1.29 s per call, which is why sync mode is
+opt-in and async is the default. The write-up does not hide the negative result, including a probe
+showing the model anchors its score to the heuristic score it is shown:
+[`docs/results/anomaly-eval.md`](docs/results/anomaly-eval.md).
 
 Every proxied request lands in a partitioned audit log, and the control plane exposes it:
 

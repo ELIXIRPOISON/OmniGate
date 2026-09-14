@@ -2,6 +2,16 @@
 
 Five lines a day: done / blocked / decided. Newest first.
 
+## 2026-09-14 (Mon, later) - the model is real now, and it says something inconvenient
+
+- Done: installed Ollama, pulled `qwen2.5:7b`, and re-ran the Sprint 6 eval against a real model for the first time. 115 calls, 0 failures. Every number in `docs/results/anomaly-eval.md` is now measured rather than stubbed, and the `fake` run is kept beside it as the baseline it always was.
+- Result: at the 0.7 decision threshold the model changes nothing. Precision 1.000, recall 0.900, identical to the heuristics alone. The stub beat it, which is only impressive until you remember the stub was written to weight the exact statistics the dataset turns on.
+- The real benefit is threshold sensitivity, which a single-threshold table hides. Heuristic recall collapses from 0.900 to 0.008 between thresholds 0.7 and 0.95; the model holds 0.342. An operator who blocks rather than flags has to run a high threshold, and there the model is the difference between a usable control and a useless one.
+- Measured, not guessed: the model anchors. The envelope shows it `heuristics.score`, and on the seven rows it could recover it returns a score within 0.02 of that number every single time. Remove only that field and it drops to a generic 0.45-0.55, so removing it makes recall worse, not better. Recorded in `docs/results/anomaly-anchoring-probe.csv`.
+- The useful half was thrown away: the verdict was `suspicious` in all fourteen classifications while the score was never usable. Enforcement keys off the number alone, so the one signal this model got right is discarded. Treating a `suspicious` verdict as a floor would have caught all seven. Filed for v1.1 because it changes enforcement semantics and needs its own eval.
+- Latency: 1.29 s per call warm and serial; the 6.2 s mean in the full run is queueing from concurrency 4 against one local instance, not per-call cost. Either figure is far above the 800 ms sync budget, so a `sync` route backed by a local 7B fails open on every request. That is the evidence behind async-by-default, which until today was a design assertion.
+- Next: Sprint 9 - hardening, /metrics, README and diagram, deploy, v1.0 tag.
+
 ## 2026-09-14 (Mon) - product review, and the three gaps it found
 
 - Done: the gateway serves the built dashboard, so `docker compose -f compose.prod.yml up` gives the whole product on port 8080 with migrations applied by a stage that runs to completion first. Routes can be created and edited from the UI. Destructive actions confirm, and the irreversible ones want the resource name typed. `tools/smoke-prod.sh` checks the built image end to end and passes.
