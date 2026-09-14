@@ -83,11 +83,36 @@ describe('chaos: Redis outage (integration)', () => {
     await waitForRedis(true);
   });
 
+  /**
+   * Teardown is bounded step by step. This suite stops and restarts a real container, and a slow
+   * Docker daemon on a shared CI runner can make any one step take minutes; an unbounded await then
+   * spends the whole hook budget and the suite is reported as a timeout with no indication of which
+   * step stalled. Testcontainers' reaper removes anything left behind, so continuing is safe.
+   */
   afterAll(async () => {
-    await app?.close();
-    await container?.stop().catch(() => undefined);
+    const bounded = async (what: string, run: () => Promise<unknown>, ms = 20_000) => {
+      let timer: NodeJS.Timeout | undefined;
+      const expired = Symbol('expired');
+      const result = await Promise.race([
+        run().catch(() => undefined),
+        new Promise((resolve) => {
+          timer = setTimeout(() => resolve(expired), ms);
+          timer.unref();
+        }),
+      ]);
+      clearTimeout(timer);
+      if (result === expired)
+        console.warn(`chaos teardown: ${what} did not finish in ${ms}ms, continuing`);
+    };
+
+    await bounded('app.close()', () => app?.close() ?? Promise.resolve());
+    await bounded('container.stop()', () => container?.stop() ?? Promise.resolve(), 60_000);
     upstream?.closeAllConnections();
-    await new Promise<void>((r) => upstream?.close(() => r()));
+    await bounded(
+      'upstream.close()',
+      () => new Promise<void>((r) => upstream?.close(() => r())),
+      10_000,
+    );
     rmSync(tmp, { recursive: true, force: true });
   });
 
