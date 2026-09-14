@@ -1,0 +1,4 @@
+
+# Imported evaluation datasets are large and reproducible; see docs/results/anomaly-eval-csic.md
+csic-2010.jsonl
+csic-sample.jsonl

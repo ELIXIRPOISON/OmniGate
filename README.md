@@ -122,18 +122,24 @@ pnpm --filter @omnigate/gateway eval:anomaly -- --provider fake
 pnpm --filter @omnigate/gateway eval:anomaly -- --provider local --model qwen2.5:7b
 ```
 
-The shipped numbers come from `qwen2.5:7b` on Ollama, 115 calls and no failures. At the default 0.7
-threshold the model changes no decision: the heuristics already give precision 1.000 and recall 0.900
-on this set. It earns its place at the thresholds you would actually block on, where the combination
-reaches recall 0.808 against 0.600 for heuristics alone and 0.475 for the model alone.
+Detection is measured against the HTTP DATASET CSIC 2010: 97,065 real requests, 25,065 of them
+attacks. **Recall 0.210 at precision 1.000, with zero false positives across all 72,000 benign
+requests.** The same heuristics score 0.900 on this project's own generated dataset, and that gap is
+the most useful thing the evaluation produced: the synthetic set was scoring the detector against
+attacks it was built to catch.
 
-The second stage is escalate-only: a model may raise a score but never lower one, except on a
-confident `benign`. That rule exists because of a measured run in which a model answering
-"suspicious / medium" to everything overwrote confident heuristic findings and took recall from 0.900
-to 0.433. Plugging in a weak model should be a no-op, not a regression.
+Conservative detection with a very low false-positive rate is the right trade for a gateway that
+flags for review. By the rule of three the 95 percent upper bound on the false-positive rate is
+1 in 24,000, which holds precision at 0.835 even if attacks are only 0.1 percent of traffic.
 
-The write-up keeps the negative results, including the two prompt bugs this found and the fix that
-made things worse before it made them better: [`docs/results/anomaly-eval.md`](docs/results/anomaly-eval.md).
+`qwen2.5:7b` recovers four further attacks out of 1,254 on real data. The model is a rounding error
+today, and the reason is structural: the gate only forwards requests the heuristics already suspect,
+capping the model at 24.6 percent recall however good it is. The second stage is escalate-only, so a
+weak model is a no-op rather than a regression.
+
+Full write-ups, including the patterns that were measured and rejected and the parts that made things
+worse before they made them better: [`anomaly-eval-csic.md`](docs/results/anomaly-eval-csic.md) and
+[`anomaly-eval.md`](docs/results/anomaly-eval.md).
 
 Every proxied request lands in a partitioned audit log, and the control plane exposes it:
 

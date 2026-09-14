@@ -2,6 +2,18 @@
 
 Five lines a day: done / blocked / decided. Newest first.
 
+## 2026-09-14 (Mon, late) - Phase 1: the evaluation was a self-test, and the real number is 0.210
+
+- Done: imported the HTTP DATASET CSIC 2010, 97,065 real requests with 25,065 attacks, and measured the same detector against traffic nobody here wrote. Recall 0.065 where our own generated set said 0.900. That fourteen-fold gap is the whole point of the exercise: the synthetic set was scoring the heuristics against attacks they were designed to catch.
+- Decided: hold every behavioural feature identical across both classes in the importer. CSIC has no sender identity and no timeline, and synthesising busy statistics for the attack rows would push the label into the features and reproduce the exact flaw being corrected. What is measured is payload detection, which is what CSIC is evidence about.
+- Done: read the misses, found five pattern gaps, measured each candidate against all 97,065 rows before adding it. `waitfor delay '0:0:15'` (535 attacks, 0 benign) was a bug rather than a gap - the rule required a parenthesis and T-SQL takes a time string. Plus CRLF header injection (266), poison null byte (149), backup leftovers .BAK/.INC/.OLD (2,132) and tilde backups (243), none matching a single benign row. Recall 0.065 -> 0.210, false positives still 0 of 72,000.
+- Rejected on measurement: flagging a lone quote in a parameter. It looked obvious and scored 16 attacks against 19 benign matches, precision 0.457. Worth recording because the instinct was to add it.
+- Seen for the first time: an actual precision/recall tradeoff. Dropping the threshold to 0.3 buys ten points of recall for a 4.7 percent false-positive rate. The synthetic set had no hard negatives at all, so every threshold looked free. The 0.7 default is now evidence rather than assertion.
+- Base rates, by rule of three on 0 failures in 72,000: upper bound on the false-positive rate about 1 in 24,000, which holds precision at 0.835 even at a 0.1 percent attack rate. Conservative detection with a very low alarm rate turns out to be usable, which the old numbers were not entitled to claim either way.
+- The model is a rounding error on real data: four extra detections out of 1,254. And the reason is structural, not about model quality - the gate only forwards what the heuristics already suspect, so the ceiling is 24.6 percent recall however good the model is. The bottleneck is the gate.
+- Largest remaining miss category is parameter tampering: `idA=1` for `id=1`, prices that do not match the catalogue. Syntactically perfect requests, wrong only against the application's schema. No regex reaches those; it needs per-route schema learning.
+- Next: behavioural half still unmeasured - needs replayed access logs and honeypot capture. Then Sprint 9.
+
 ## 2026-09-14 (Mon, night) - Phase 0: two prompt bugs, one wrong fix, one real bug
 
 - Done: the classifier no longer returns a number. It returns a verdict and a confidence, and `CONFIDENCE_SCORE` derives the score in code. The old prompt put "suspicious" at 0.3-0.7 while the decision threshold was also 0.7, so any request the model called suspicious was mathematically barred from triggering action. It was obeying instructions; we wrote the instructions.

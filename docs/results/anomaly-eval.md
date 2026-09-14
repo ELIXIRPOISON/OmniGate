@@ -1,4 +1,9 @@
-# Anomaly detection evaluation
+# Anomaly detection evaluation (synthetic dataset)
+
+> **Read [`anomaly-eval-csic.md`](anomaly-eval-csic.md) first.** The same detector scores recall
+> 0.900 here and 0.210 against 97,065 real requests from CSIC 2010. The numbers on this page are a
+> self-test against a dataset this project generated, kept because the pipeline was built and tuned
+> against it, not because they measure detection quality.
 
 Dataset: `docs/eval/anomaly-eval.jsonl`, 200 labelled rows (80 benign, 120 malicious) generated
 deterministically by `pnpm --filter @omnigate/gateway eval:generate`. Harness:
