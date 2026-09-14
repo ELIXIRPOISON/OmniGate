@@ -49,7 +49,9 @@ export const INJECTION_PATTERNS: ReadonlyArray<{
   {
     category: 'sqli',
     name: 'time_based',
-    re: /\b(sleep|pg_sleep|waitfor\s+delay|benchmark)\s*\(/,
+    // WAITFOR DELAY takes a time string, not parentheses: `waitfor delay '0:0:15'`. Requiring a
+    // paren after it missed 535 blind-injection requests in CSIC 2010.
+    re: /\b(sleep|pg_sleep|benchmark)\s*\(|\bwaitfor\s+delay\s*['"(]/,
   },
   {
     category: 'sqli',
@@ -95,6 +97,30 @@ export const INJECTION_PATTERNS: ReadonlyArray<{
     category: 'cmd_injection',
     name: 'subshell',
     re: /\$\([^)]*\)|`[^`]{1,80}`/,
+  },
+  // Response splitting. 266 requests in CSIC 2010, no benign match.
+  {
+    category: 'other',
+    name: 'crlf_header_inject',
+    re: /(\r\n|%0d%0a)\s*(set-cookie|location|content-length|content-type)\s*:/i,
+  },
+  // Poison null byte, the classic extension and filter bypass. 149 requests, no benign match.
+  {
+    category: 'traversal',
+    name: 'null_byte',
+    re: /%00|\u0000/,
+  },
+  // Probing for editor and deployment leftovers: index.jsp.INC, imagenes.BAK, logo.gif~.
+  // 2,132 and 243 requests respectively in CSIC 2010, neither matching any of 72,000 benign rows.
+  {
+    category: 'traversal',
+    name: 'backup_source_file',
+    re: /\.(old|bak|backup|swp|orig|save|inc)(\b|$)/i,
+  },
+  {
+    category: 'traversal',
+    name: 'tilde_backup',
+    re: /~(\s|$|\?)/,
   },
   // Server-side template injection
   {

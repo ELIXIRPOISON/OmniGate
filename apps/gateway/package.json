@@ -30,7 +30,8 @@
     "test:integration": "vitest run --config ./vitest.config.integration.ts",
     "eval:generate": "node dist/eval/generate-dataset.js",
     "eval:anomaly": "node dist/eval/eval-anomaly.js",
-    "seed:audit": "node dist/cli/seed-audit-logs.js"
+    "seed:audit": "node dist/cli/seed-audit-logs.js",
+    "eval:import-csic": "node dist/eval/import-csic.js"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
