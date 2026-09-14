@@ -79,6 +79,12 @@ export const envSchema = z
     WORKER_INLINE: bool().default(true),
     LOG_RETENTION_DAYS: int().positive().default(30),
     EXPOSE_ANOMALY_SCORE: bool().default(false),
+    /**
+     * Bearer token for /metrics. Unset serves the endpoint in development and hides it in
+     * production: an open metrics endpoint on a public URL discloses traffic shape and how close
+     * the anomaly stage is to firing.
+     */
+    METRICS_TOKEN: z.string().min(16).optional(),
   })
   .superRefine((env, ctx) => {
     if (!env.JWT_SECRET && !env.JWT_JWKS_URL) {
@@ -94,6 +100,34 @@ export const envSchema = z
         path: ['ADMIN_JWT_SECRET'],
         message: 'must differ from JWT_SECRET',
       });
+    }
+    // Production must not boot on the values .env.example ships with. A deploy that silently keeps
+    // the sample admin password is worse than one that refuses to start, because nobody finds out.
+    if (env.NODE_ENV === 'production') {
+      const shipped = [
+        ['ADMIN_PASSWORD', env.ADMIN_PASSWORD],
+        ['JWT_SECRET', env.JWT_SECRET],
+        ['API_KEY_PEPPER', env.API_KEY_PEPPER],
+        ['ADMIN_JWT_SECRET', env.ADMIN_JWT_SECRET],
+      ] as const;
+      for (const [key, value] of shipped) {
+        if (value && (value === 'admin' || /dev-only|change-me/i.test(value))) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [key],
+            message:
+              'still set to the value from .env.example; generate a real one before deploying',
+          });
+        }
+      }
+      if (env.EXPOSE_ANOMALY_SCORE) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['EXPOSE_ANOMALY_SCORE'],
+          message:
+            'must be false in production: it tells a caller exactly how close their probe came to the threshold',
+        });
+      }
     }
     if (
       env.LLM_PROVIDER !== 'fake' &&

@@ -14,6 +14,28 @@ LLM classification runs off the hot path by default; routes can opt into synchro
 
 Full design: [`docs/02-ARCHITECTURE.md`](docs/02-ARCHITECTURE.md). Start with [`docs/00-INDEX.md`](docs/00-INDEX.md).
 
+## Production hardening
+
+The image refuses to boot in production on any value `.env.example` ships with, including the sample
+admin password. A deploy that silently keeps the demo credentials is worse than one that fails
+loudly, because nobody finds out.
+
+Security headers cover the dashboard and the control plane and are deliberately **not** applied to
+`/api`. Those responses belong to the upstream, and a gateway that rewrites an upstream's CSP or
+frame policy silently breaks applications it is meant to be transparent to. The dashboard's one
+inline script, the theme guard that runs before first paint, is hashed from the built file at boot
+rather than allowed with `unsafe-inline` or pinned to a constant that would drift the day someone
+edits it.
+
+`GET /metrics` serves Prometheus text: request counts and latency histograms by route, rate-limit
+refusals, cache outcomes and anomaly blocks. Labels are bounded values only, never raw paths. It
+needs `METRICS_TOKEN`; without one it serves in development and 404s in production, because an open
+metrics endpoint on a public URL discloses traffic shape and how close the anomaly stage is to
+firing.
+
+`sh tools/smoke-prod.sh $KEY` checks all of this against the running image, including that a proxied
+response comes back untouched.
+
 ## Project structure
 
 ```

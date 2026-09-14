@@ -42,6 +42,8 @@ services:
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       ANOMALY_AUTO_THROTTLE: ${ANOMALY_AUTO_THROTTLE:-false}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      SCHEMA_VALUE_SHAPES: ${SCHEMA_VALUE_SHAPES:-false}
     depends_on:
       migrate:
         condition: service_completed_successfully

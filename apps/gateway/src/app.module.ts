@@ -13,6 +13,7 @@ import { ProblemDetailsFilter } from './common/problem/problem-details.filter.js
 import { RequestIdMiddleware } from './common/request-id.middleware.js';
 import { ConfigModule } from './config/config.module.js';
 import { HealthModule } from './health/health.module.js';
+import { MetricsModule } from './metrics/metrics.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { ProxyModule } from './proxy/proxy.module.js';
 import { RedisModule } from './redis/redis.module.js';
@@ -29,6 +30,7 @@ import { RoutingModule } from './routing/routing.module.js';
     RoutingModule,
     ProxyModule,
     HealthModule,
+    MetricsModule,
     AdminModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: ProblemDetailsFilter }],

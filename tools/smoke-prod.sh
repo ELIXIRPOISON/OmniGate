@@ -53,6 +53,20 @@ else
   echo "  FAIL  could not find a hashed asset in index.html"; fails=$((fails + 1))
 fi
 
+echo "hardening"
+hdr() { curl -sI -H 'accept: text/html' "$1" | tr -d '\r' | awk -F': ' -v k="$2" 'tolower($1)==k{print $2}'; }
+check "nosniff on the dashboard"    "nosniff" "$(hdr "$BASE/" x-content-type-options)"
+check "framing denied"              "DENY"    "$(hdr "$BASE/" x-frame-options)"
+check "referrer suppressed"         "no-referrer" "$(hdr "$BASE/" referrer-policy)"
+CSP=$(hdr "$BASE/" content-security-policy)
+check "CSP present"                 "yes" "$([ -n "$CSP" ] && echo yes || echo no)"
+check "CSP has no unsafe-inline js" "yes" "$(echo "$CSP" | grep -q "script-src[^;]*unsafe-inline" && echo no || echo yes)"
+check "CSP hashes the theme script" "yes" "$(echo "$CSP" | grep -q "script-src[^;]*sha256-" && echo yes || echo no)"
+# A gateway must not rewrite the upstream's own security headers.
+UPSTREAM_CSP=$(curl -sI "$BASE/api/mock/items" | tr -d '\r' | awk -F': ' 'tolower($1)=="content-security-policy"{print $2}')
+check "proxied response untouched"  "" "$UPSTREAM_CSP"
+check "admin is never cached"       "no-store" "$(curl -sI "$BASE/admin/v1/routes" | tr -d '\r' | awk -F': ' 'tolower($1)=="cache-control"{print $2}')"
+
 echo "control plane"
 check "admin needs auth"          401 "$(code "$BASE/admin/v1/routes")"
 TOKEN=$(curl -s -X POST -H 'content-type: application/json' \
