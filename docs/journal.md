@@ -2,6 +2,17 @@
 
 Five lines a day: done / blocked / decided. Newest first.
 
+## 2026-09-14 (Mon) - product review, and the three gaps it found
+
+- Done: the gateway serves the built dashboard, so `docker compose -f compose.prod.yml up` gives the whole product on port 8080 with migrations applied by a stage that runs to completion first. Routes can be created and edited from the UI. Destructive actions confirm, and the irreversible ones want the resource name typed. `tools/smoke-prod.sh` checks the built image end to end and passes.
+- Decided: reviewed the product against its own PRD personas rather than against the backlog. The operator and the reviewer/recruiter are the two that matter, and the success metric is "a stranger can run the quick start in 5 minutes". Measured against that, the biggest defect was not a missing feature: the dashboard was simply not in the compose stack, so anyone following the README saw a curl demo and never saw the UI.
+- Decided: adding a service is the defining operator action for a gateway, and it was curl-only. Kong, Tyk and Zuplo all lead onboarding with that screen. Create and edit now exist; policies remain API-only and are queued for v1.1.
+- Measured: the image went 742 MB, then 505 MB once the Prisma CLI was kept out of the runtime stage, then 392 MB after dropping the query compilers for the four databases this gateway does not use. `@prisma/client` pulls `prisma` and `typescript` as *optional* peers, which drags Studio, pglite, effect and elkjs behind it. docs/08's under-250 MB target predates Prisma 7 and is not reachable on node:22-alpine, which is 171 MB empty; docs/10 records the numbers instead of pretending the target was met.
+- Found by testing: the SPA fallback keyed off the Accept header, so `HEAD /` and any client sending `*/*` got a 404 while browsers got 200. It now falls back for any extension-less path the gateway does not own.
+- Found in CI: the chaos suite failed as a 180s afterAll timeout while passing locally in 13s. Teardown stops and restarts a real container, so one slow step on a shared runner ate the whole hook budget and the failure named no step. Each step is now bounded and says which one it missed.
+- Costed the deploy: Fly has no free tier, the trial is 2 machine-hours, and Managed Postgres starts at $38/month. Nothing built here needs a paid tier to demonstrate; only a URL that stays up costs money. Neon's free 0.5 GB holds about 1.3M audit rows at the measured 377 MB per million, and Upstash's free 500K commands/month is about 125K requests at ~4 Redis calls each.
+- Next: Sprint 9 proper - hardening, /metrics, README and diagram, deploy, v1.0 tag.
+
 ## 2026-09-12 (Sat) - the real logo
 
 - Done: the supplied artwork is in the product. `tools/trace-logo.mjs` turns the PNG into outlines - zlib decode, marching squares over the alpha coverage field, loops linked and simplified to 0.12 units - and emits `logo-paths.ts` plus `public/favicon.svg` from the same paths. The rail, the mobile header and the login screen use the full lockup, so the wordmark is the artwork's own lettering. Brand 600 is now `#1a56f0`, sampled from the disc.
