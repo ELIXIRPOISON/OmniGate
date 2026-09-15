@@ -10,7 +10,8 @@ learned anomaly detection, a partitioned audit log, an admin API and a dashboard
 ### Gateway
 
 - **Routing and proxying.** Services registered in the database or `routes.yaml`, database wins.
-  Bodies stream through untouched, hop-by-hop and internal headers stripped, `X-Forwarded-*` honoured
+  Bodies up to `MAX_BODY_BYTES` are buffered for the anomaly pre-screen and replayed byte-for-byte;
+  larger ones are refused with 413. Hop-by-hop and internal headers are stripped, `X-Forwarded-*` honoured
   only when a proxy is trusted. Timeouts enforced by the gateway's own timer, because the proxy
   engine reports a socket reset instead of a timeout.
 - **Auth.** HS256 or RS256 JWTs and API keys, with scopes. `JWT_ISSUER` and `JWT_AUDIENCE` pin the
@@ -21,7 +22,8 @@ learned anomaly detection, a partitioned audit log, an admin API and a dashboard
   response; `X-RateLimit-Degraded` when Redis is unreachable and the limiter fails open.
 - **Response cache.** Per route TTL on GET and HEAD, keyed with vary-on-principal, `X-Cache` and
   `Age` headers, a stampede lock and an admin purge.
-- **Anomaly detection.** Nine signals scored inline in under a millisecond and combined with
+- **Anomaly detection.** `LLM_PROVIDER` defaults to `fake`, so a deployment with no model boots and
+  runs heuristics plus the learned schema. Nine signals scored inline in under a millisecond and combined with
   noisy-OR. Suspicious requests are classified after the response by any OpenAI-compatible model.
 - **Audit log.** Every proxied request, buffered and batch-inserted into a monthly-partitioned table
   with a BRIN index. Old partitions are dropped on a schedule rather than deleted row by row.

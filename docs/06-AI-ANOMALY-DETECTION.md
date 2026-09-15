@@ -137,8 +137,8 @@ Exactly three mechanisms can turn a finding into a refusal: a `sync` route's 403
 under `ANOMALY_AUTO_THROTTLE`. `ANOMALY_ENFORCE=false` disables all three at once regardless of
 per-route settings; scoring, recording, classification and the review queue continue unchanged.
 `compose.prod.yml` ships with it off so a new deployment observes before it refuses. The score every
-threshold compares is the noisy-OR of the signal table in section 4, escalated but never lowered by a
-model verdict (`anomaly/combine.ts`).
+threshold compares is the noisy-OR of the signal table in section 4, which a model verdict may raise
+and may lower only when it is a confident `benign` (`anomaly/combine.ts`).
 
 ### 7.1 Implementation notes (Sprint 6)
 - `async` (default): the queue worker classifies, writes `anomaly_events`, then counts the event in `anomaly:hits:{principal}` (sorted set, `ANOMALY_THROTTLE_WINDOW_S`). Reaching `ANOMALY_THROTTLE_EVENTS` entries at score >= 0.7 sets `throttle:{principal}` for `ANOMALY_THROTTLE_SECONDS`, which the RateLimitGuard already honours: the next request gets 429 before any bucket is touched. With `ANOMALY_AUTO_THROTTLE=false` (the default) the decision is logged and not applied.

@@ -62,14 +62,18 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
       ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:?set ADMIN_JWT_SECRET in .env, must differ from JWT_SECRET}
+      # Only matters if the dashboard is hosted somewhere other than this gateway. Set it in .env for
+      # that case; the development value in .env.example is deliberately commented out.
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
       LLM_PROVIDER: ${LLM_PROVIDER:-fake}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       # Observe-only until the review queue has earned trust: everything is scored and recorded,
-      # nothing is refused. Flip to true per docs/06 section 7.2.
-      ANOMALY_ENFORCE: ${ANOMALY_ENFORCE:-false}
+      # nothing is refused. Hard-coded rather than read from .env on purpose - .env.example carries the
+      # development value and must not be able to switch enforcement on in production by accident. To
+      # enforce, change this line to 'true' (or override it in a compose overlay), per docs/06 §7.0.
+      ANOMALY_ENFORCE: 'false'
       ANOMALY_AUTO_THROTTLE: ${ANOMALY_AUTO_THROTTLE:-false}
       SCHEMA_VALUE_SHAPES: ${SCHEMA_VALUE_SHAPES:-false}
       METRICS_TOKEN: ${METRICS_TOKEN:-}

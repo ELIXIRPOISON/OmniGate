@@ -56,40 +56,64 @@ the whole product.
 
 ## 3. Environment variables
 
-Generated from `apps/gateway/src/config/env.ts`; `.env.example` carries the same list with comments.
-The four secrets `JWT_SECRET`, `API_KEY_PEPPER`, `ADMIN_PASSWORD` and `ADMIN_JWT_SECRET` must not be
-the placeholder values in production or the gateway refuses to boot.
+Every variable the gateway reads, generated from `apps/gateway/src/config/env.ts`. Defaults are the
+code's defaults for a bare image; `.env.example` and `compose.prod.yml` set some of them explicitly
+and say so. The four secrets `JWT_SECRET`, `API_KEY_PEPPER`, `ADMIN_PASSWORD` and `ADMIN_JWT_SECRET`
+must not be the placeholder values in production or the gateway refuses to boot.
 
 | Var | Required | Default | Purpose |
 |---|---|---|---|
-| `JWT_ISSUER` |  |  | required iss claim |
-| `JWT_AUDIENCE` |  |  | required aud claim |
-| `JWT_JWKS_URL` |  |  | RS256 key set from your identity provider |
+| `PORT` |  | `8080` | listen port |
+| `NODE_ENV` |  | `development` | `production` enables the boot guards |
+| `LOG_LEVEL` |  | `info` | pino level |
+| `TRUST_PROXY` |  | `false` | believe X-Forwarded-* from exactly one hop; only when a proxy is the sole way to reach the port |
+| `DATABASE_URL` | ✔ |  | PostgreSQL |
+| `REDIS_URL` | ✔ |  | Redis; `rediss://` supported |
+| `ROUTES_FILE` |  | `./routes.yaml` | bootstrap route file, read once at boot |
+| `ALLOW_PRIVATE_UPSTREAMS` |  | `false` | permit private/loopback upstreams (SSRF guard off) |
+| `JWT_SECRET` |  |  | HS256; one of this or JWT_JWKS_URL |
+| `JWT_ISSUER` |  |  | required `iss`; set whenever the JWKS is not yours alone |
+| `JWT_AUDIENCE` |  |  | required `aud`; same |
+| `JWT_JWKS_URL` |  |  | RS256 key set from your identity provider (jose remote JWKS, cached, refetched on unknown kid with a cooldown) |
 | `API_KEY_PEPPER` | ✔ |  | API key hashing; rotating it invalidates every key |
-| `ADMIN_PASSWORD` | ✔ |  | seeded admin; boot refuses "admin" in production |
+| `ADMIN_EMAIL` | ✔ |  | seeded admin |
+| `ADMIN_PASSWORD` | ✔ |  | seeded admin; `admin` refused in production |
 | `ADMIN_JWT_SECRET` | ✔ |  | admin session signing; must differ from JWT_SECRET |
-| `CORS_ORIGIN` |  | `http://localhost:5173` | control-plane CORS, only needed if the dashboard is hosted elsewhere |
-| `UPSTREAM_TIMEOUT_MS` |  | `30_000` | default route timeout |
-| `RL_DEFAULT_MAX` |  | `100` | default limiter max |
+| `CORS_ORIGIN` |  | `http://localhost:5173` | control-plane CORS; only needed if the dashboard is hosted elsewhere |
+| `MAX_BODY_BYTES` |  | `1048576` | anomaly pre-screen buffers bodies up to this and replays them; larger bodies are refused with 413 |
+| `UPSTREAM_TIMEOUT_MS` |  | `30000` | default route timeout |
+| `RL_DEFAULT_WINDOW_S` |  | `60` | default limiter window |
+| `RL_DEFAULT_MAX` |  | `100` | default limiter max per principal |
 | `RL_ANON_MAX` |  | `30` | extra per-IP cap for anonymous callers on open routes |
 | `RL_COUNT_CACHE_HITS` |  | `true` | whether a cache hit consumes rate-limit budget |
-| `RL_FAIL_OPEN` |  | `true` | Redis down: allow (true) or 503 |
-| `CACHE_MAX_BODY_BYTES` |  | `262144` | largest response body the cache will store |
-| `CACHE_DEFAULT_VARY_ON_PRINCIPAL` |  | `true` | default for a route's `cache_vary_on_principal` |
+| `RL_FAIL_OPEN` |  | `true` | Redis down: allow with X-RateLimit-Degraded (true) or 503 |
+| `CACHE_MAX_BODY_BYTES` |  | `262144` | largest response body the cache stores |
+| `CACHE_DEFAULT_VARY_ON_PRINCIPAL` |  | `true` | default for a route's cache_vary_on_principal |
+| `ANOMALY_SAMPLE_RATE` |  | `0.02` | share of below-gate traffic still classified |
 | `ANOMALY_GATE_THRESHOLD` |  | `0.4` | score at which a request is recorded and classified |
 | `ANOMALY_BLOCK_THRESHOLD` |  | `0.9` | sync-mode 403 threshold |
 | `ANOMALY_AUTO_THROTTLE` |  | `false` | reactive throttle on repeat offenders |
-| `LLM_PROVIDER` |  | `openai` | openai | anthropic | local | fake |
+| `ANOMALY_ENFORCE` |  | `true` | global switch for every refusal; false = observe only (compose.prod.yml hard-codes false) |
+| `SCHEMA_LEARNING` |  | `true` | learned per-route parameter schema |
+| `SCHEMA_WARMUP_REQUESTS` |  | `500` | observations before the schema signal activates |
+| `SCHEMA_PROMOTE_PRINCIPALS` |  | `3` | distinct callers before a new name is legitimate |
+| `SCHEMA_MAX_NAMES` |  | `256` | names before a route is treated as unmodellable |
+| `SCHEMA_VALUE_SHAPES` |  | `false` | also check value shapes; trades precision for recall |
+| `LLM_PROVIDER` |  | `fake` | `fake` (default: heuristics only) | openai | anthropic | local |
 | `LLM_MODEL` |  |  | provider default when unset |
 | `LLM_API_KEY` |  |  | required unless fake or local |
-| `LLM_DAILY_CALL_CAP` |  | `20_000` | classification budget per day |
+| `LLM_DAILY_CALL_CAP` |  | `20000` | classification budget per day |
+| `LLM_BASE_URL` |  |  | any OpenAI-compatible endpoint |
 | `LLM_MAX_OUTPUT_TOKENS` |  | `200` | per classification |
-| `LLM_TIMEOUT_ASYNC_MS` |  | `5_000` | async classification timeout |
+| `LLM_TIMEOUT_SYNC_MS` |  | `800` | sync-mode budget; exceed = allow |
+| `LLM_TIMEOUT_ASYNC_MS` |  | `5000` | async classification timeout |
 | `ANOMALY_THROTTLE_EVENTS` |  | `3` | events before throttling |
 | `ANOMALY_THROTTLE_WINDOW_S` |  | `300` | window for those events |
 | `ANOMALY_THROTTLE_SECONDS` |  | `600` | throttle duration |
+| `WORKER_INLINE` |  | `true` | run BullMQ processors in-process |
 | `LOG_RETENTION_DAYS` |  | `30` | audit partitions kept |
 | `EXPOSE_ANOMALY_SCORE` |  | `false` | dev-only response header; refused in production |
+| `METRICS_TOKEN` |  |  | bearer for /metrics; unset = dev only |
 
 ## 4. First deploy
 

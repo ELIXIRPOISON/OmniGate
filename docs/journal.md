@@ -11,7 +11,11 @@ Five lines a day: done / blocked / decided. Newest first.
 - Caught by reading the code before writing the doc: `POST /routes/reload` re-merges the database over the routes loaded at boot; it does not re-read the file. I had written that it did. Fixed in three places before it shipped.
 - Wrote docs/15-ADOPTING.md: five recipes with real field names, the five facts every recipe relies on, a route-field table for both forms, "putting it on the internet", operating notes, and a what-it-does-not-do list in one place. README now leads strangers there instead of to the planning pack, and says plainly that only auth fails closed.
 - Verified: 317 tests, 27 smoke checks on the demo overlay, and the production file alone booting with routes:0, an admin-only seed, no mock, observe-only, loopback bind, and a route created through the API serving traffic.
-- Next: round-two audit against the new docs, then the v1.0.0 tag decision.
+- Round two, same five adopters against the revised docs: five of five reach a first request, up from four. 50 gaps confirmed, most of them operational depth a Kong evaluator wants and none a blocker for reaching traffic.
+- Two of them were mine and real. `cp .env.example .env` fed compose's interpolation, so the "observe-only" production stack actually booted with `ANOMALY_ENFORCE=true` - the exact leak I had just fixed for the database URL, one variable over. Production policy is hard-coded in compose.prod.yml now and `.env` cannot override it. And `LLM_PROVIDER` defaulted to `openai` in code, which demands a key, so a bare image that configured no model refused to start; the default is `fake`, heuristics only.
+- The env table in the runbook had 28 rows because my extractor stopped at the first multi-line entry; env.ts has 51. Regenerated with a parser that walks entries properly.
+- Recorded for v1.1 rather than fixed: a trusted-CIDR form of TRUST_PROXY, inspecting or resetting a learned schema, a "would have blocked" counter in observe mode, manual block of an IP after review, a non-interactive admin credential, and an API-key-only mode that needs no JWT secret at all.
+- Next: the v1.0.0 tag decision, which is also when the GHCR images the adoption docs point at come into existence.
 
 ## 2026-09-15 (Tue) - Sprint 9: hardening, metrics, diagram, v1.0
 

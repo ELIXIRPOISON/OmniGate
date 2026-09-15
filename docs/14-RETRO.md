@@ -98,5 +98,11 @@ Ordered by evidence rather than appeal.
 | 12 | Cross-principal correlation | One attacker across fifty API keys currently looks like fifty quiet callers. |
 | 13 | Finer value-shape representation | Four bits costs 28 false positives. A better encoding may buy the same recall for less. |
 | 14 | Token bucket alongside sliding window | Burst-tolerant limiting, in the original plan, never started. |
+| 15 | Trusted-CIDR / hop-count `TRUST_PROXY` | A boolean cannot express "trust these two proxies"; behind two hops the wrong `X-Forwarded-For` entry is believed. |
+| 16 | Inspect and reset a learned route schema | Operators cannot see what the schema learned or clear it after a bad learning window. |
+| 17 | "Would have blocked" counter in observe mode | `/metrics` counts actual blocks only, so observe-only gives no number to decide enforcement with. |
+| 18 | Manual block or throttle of an IP or subject after review | The review drawer records a verdict and cannot act on it beyond the key-level throttle. |
+| 19 | Non-interactive admin credential | Declarative setups need a token, not a password login. |
+| 20 | API-key-only mode | A JWT secret is required even when no JWTs are issued, and becomes a dormant credential. |
 
 Items 1 and 2 are worth more than the rest combined.

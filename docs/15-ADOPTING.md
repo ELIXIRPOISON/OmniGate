@@ -55,7 +55,7 @@ The same route expressed both ways. Only `service` and `upstream` are required.
 | `service` | `service` | required | URL segment; `^[a-z0-9][a-z0-9-]{0,62}$`, unique |
 | `upstream` | `upstream` | required | `http://` or `https://` origin the request is proxied to |
 | `strip_prefix` | `stripPrefix` | `true` | drop `/api/{service}` before forwarding |
-| `methods` | `methods` | `['*']` | allowed methods; anything else is `method_mismatch` |
+| `methods` | `methods` | `['*']` | anything else raises the `method_mismatch` signal; it is scored, not refused |
 | `auth_required` | `authRequired` | `true` | a JWT or API key must be presented |
 | `scopes` | `scopes` | `[]` | the credential must carry at least one; naming any implies auth |
 | `rate_limit: {window_seconds, max_requests}` | `policyId` | route → key's policy → `RL_DEFAULT_*` | see [05](05-RATE-LIMIT-AND-CACHE.md) §1.1 for precedence |
@@ -83,11 +83,11 @@ git clone https://github.com/ELIXIRPOISON/OmniGate && cd OmniGate
 cp .env.example .env
 ```
 
-Edit `.env`: replace the four secrets, set `ADMIN_EMAIL`, and add
+Edit `.env`: replace the four secrets, set `ADMIN_EMAIL`, and set these two, both already present:
 
 ```
 TRUST_PROXY=true          # nginx will be the only thing reaching :8080
-CORS_ORIGIN=https://gateway.example.com
+CORS_ORIGIN=https://gateway.example.com   # only matters if you ever host the dashboard elsewhere
 ```
 
 Your service must listen on an address the container can reach. `127.0.0.1` inside your service means
@@ -144,6 +144,10 @@ services:
       REDIS_URL: redis://omnigate-redis:6379
       ALLOW_PRIVATE_UPSTREAMS: 'true'
       ANOMALY_ENFORCE: 'false'
+      # true only if a reverse proxy is the sole thing that can reach 8080. Without it, every public
+      # caller arrives from the proxy's IP and the anonymous per-IP cap (RL_ANON_MAX, 30/min) applies
+      # to all of them together.
+      TRUST_PROXY: 'true'
     depends_on:
       omnigate-migrate: { condition: service_completed_successfully }
   omnigate-migrate:
@@ -164,9 +168,14 @@ volumes:
   omnigate-pg:
 ```
 
-`.env.omnigate` holds the four secrets plus `ADMIN_EMAIL`, `NODE_ENV=production`. Because the gateway
-shares your compose network, upstreams are just service names: `http://users:3000`,
-`http://billing:8080`, `http://catalog:3000`.
+`.env.omnigate` holds the four secrets plus `ADMIN_EMAIL` and `NODE_ENV=production`.
+`${OMNIGATE_DB_PASSWORD}` is compose interpolation, so it lives in the project's own `.env` next to
+the compose file, not in `.env.omnigate`. Until a release has published the images, replace `image:`
+with `build: { context: ./OmniGate }` (a checkout) or run `docker build -t omnigate .` there first.
+
+Because the gateway shares your compose network, upstreams are just service names: `http://users:3000`,
+`http://billing:8080`, `http://catalog:3000`. Limits are per caller per route (a key, a user, or an
+anonymous IP), not per service: there is no service-wide ceiling in v1.
 
 If you would rather keep routes in version control than click them in, put them in a file and mount
 it:
@@ -176,15 +185,17 @@ it:
 ```
 
 Then `up -d`, seed, sign in, and either add the three routes in the UI or edit the file and restart
-the gateway container (the file is read at boot only). Give `catalog` a `cache_ttl_seconds` and, if its data is the same for every
-caller, `cache_vary_on_principal: false`.
+the gateway container (the file is read at boot only). Give `catalog` a `cache_ttl_seconds`; if its
+data is the same for every caller, add `cache_vary_on_principal: false`, which is a file-only field,
+so that route belongs in the mounted file rather than the UI.
 
 ## Recipe C: flag first, enforce later
 
 You run a public API that is probed constantly and you will not deploy anything that can refuse
 legitimate traffic until you have watched it.
 
-`compose.prod.yml` already starts in observe-only mode: `ANOMALY_ENFORCE=false`. In that state every
+`compose.prod.yml` starts in observe-only mode: it hard-codes `ANOMALY_ENFORCE: 'false'` and ignores
+the value in `.env` on purpose, so a copied development file cannot switch enforcement on. In that state every
 request is still scored, every suspicious one is still recorded and shows up under **Anomalies**, and
 **nothing is refused** regardless of any route's `anomaly_mode`, `block_on_heuristic` or the reactive
 throttle. Leave it that way and use the dashboard for a week or two.
@@ -213,9 +224,12 @@ stay inert until `ANOMALY_ENFORCE=true`:
 | `block_on_heuristic: true` on a file route | route | 403 immediately when an injection pattern matched and the heuristic score is ≥ 0.95, no model involved |
 | `ANOMALY_AUTO_THROTTLE=true` | global | a principal with 3 events scoring ≥ 0.7 in 5 minutes is throttled (429) for 10 minutes |
 
-Enable them in that order of confidence: `ANOMALY_ENFORCE=true` with `block_on_heuristic` on the
-routes that take user input, watch, then consider `sync` only where a model with sub-second latency
-is configured. A local 7B model classifies in about 1.3 s and will never make the 800 ms budget, so
+Enable them in that order of confidence: edit `ANOMALY_ENFORCE` to `'true'` in `compose.prod.yml` (or
+override it in an overlay file), put `block_on_heuristic: true` on the file routes that take user
+input (it is a file-only field, so those routes belong in the mounted `routes.yaml`), watch, then
+consider `sync` only where a model with sub-second latency is configured. A model verdict can raise a
+score and, only when it is a confident `benign`, lower one (`anomaly/combine.ts`); refusals, 401, 403
+and 429 alike, are written to the audit log like any other response. A local 7B model classifies in about 1.3 s and will never make the 800 ms budget, so
 `sync` there is a no-op that fails open. `SCHEMA_VALUE_SHAPES=true` roughly doubles recall and costs
 precision; the numbers are in the results page.
 
@@ -252,17 +266,32 @@ files normally do become yours.
 
 **Migrations.** The runtime image deliberately does not contain the Prisma CLI, so a "release command"
 inside it cannot migrate. Run the migrate image against the managed database from anywhere Docker
-runs, before each deploy that includes a migration:
+runs. It is idempotent, so run it before every deploy rather than deciding whether one is needed:
 
 ```bash
 docker run --rm -e DATABASE_URL='postgresql://...' ghcr.io/elixirpoison/omnigate-migrate:latest
+# before a release has published that image, build it from a checkout:
+docker build --target migrate -t omnigate-migrate . && docker run --rm -e DATABASE_URL='...' omnigate-migrate
 ```
+
+Use the database's *public* URL from your machine and the *internal* one in the platform's env; add
+`?sslmode=require` if the provider requires TLS. If the gateway starts before the schema exists it
+boots and `/readyz` passes (it checks connectivity, not schema), but the admin login fails until the
+migration has run.
 
 or from a checkout, `DATABASE_URL='postgresql://...' pnpm --filter @omnigate/gateway prisma:migrate:deploy`.
 Platforms that can run a pre-deploy job from a second image target can point it at `--target migrate`.
 
-**Seeding.** Once, from a shell in the running container or a one-off job with the same env:
-`node dist/prisma/seed.js`. It needs `ADMIN_EMAIL`, `ADMIN_PASSWORD` and `API_KEY_PEPPER`.
+**Seeding.** Once. It only needs a database URL and three variables, so it does not require a shell
+into the platform:
+
+```bash
+docker run --rm -e DATABASE_URL='postgresql://...' -e ADMIN_EMAIL=you@example.com \
+  -e ADMIN_PASSWORD='...' -e API_KEY_PEPPER='...' -e REDIS_URL=redis://unused:6379 \
+  -e JWT_SECRET='...' -e ADMIN_JWT_SECRET='...' ghcr.io/elixirpoison/omnigate:latest node dist/prisma/seed.js
+```
+
+The extra variables are there only because the seed loads the full environment schema.
 
 **Environment**, minimum (these are the gateway's own names; `compose.prod.yml` additionally accepts
 `MANAGED_DATABASE_URL` / `MANAGED_REDIS_URL` so a developer's host-side `.env` cannot leak into the
@@ -284,7 +313,10 @@ ALLOW_PRIVATE_UPSTREAMS=true    # if your upstreams are on the platform's privat
 ANOMALY_ENFORCE=false           # until you have watched it
 ```
 
-Health check path `/readyz`. Your upstream is whatever the platform's private DNS calls it,
+Point the platform's *deploy gate* at `/readyz` (Redis and Postgres reachable) and its *liveness*
+check at `/healthz`. `/readyz` answers 503 while Redis is down even though the data plane keeps
+serving with degraded headers, so a load balancer that drains on `/readyz` would remove a working
+instance during a Redis blip. Your upstream is whatever the platform's private DNS calls it,
 `http://orders.railway.internal:3000` and the like, added as a route after you sign in.
 
 ---
@@ -298,7 +330,11 @@ Health check path `/readyz`. Your upstream is whatever the platform's private DN
 - `CORS_ORIGIN` matters only if you host the dashboard somewhere other than the gateway. Served from
   the gateway, it needs no CORS; the setting exists for the split case and covers `/admin` only.
 - `/metrics` is hidden in production unless `METRICS_TOKEN` is set; scrape with
-  `Authorization: Bearer <token>`.
+  `Authorization: Bearer <token>`. Series: `omnigate_requests_total{route,method,status}`,
+  `omnigate_request_duration_seconds{route}` and `omnigate_upstream_duration_seconds{route}`
+  (histograms), `omnigate_rate_limited_total{route}`, `omnigate_cache_total{route,status}`,
+  `omnigate_anomaly_blocked_total{route}`, plus process uptime and RSS gauges. `route` is the service
+  name or `unrouted`, never a path.
 - The control plane shares the port with the data plane and is protected by the admin login. If you
   want it unreachable from the public internet, deny `/admin` and `/` at the reverse proxy for
   non-office addresses; the data plane under `/api` is unaffected.
@@ -314,6 +350,8 @@ Health check path `/readyz`. Your upstream is whatever the platform's private DN
   `X-RateLimit-Degraded: true`; set `RL_FAIL_OPEN=false` to answer 503 instead. Learned schemas read as
   empty and go silent rather than alerting.
 - **Model down or slow.** The request is allowed and the event is recorded with the heuristic score.
+  `LLM_PROVIDER=fake`, the default, is a deterministic stub: it exercises the pipeline and adds
+  nothing to detection, so a deployment with no model is heuristics plus the learned schema.
 - **Audit volume.** About 377 MB per million requests in PostgreSQL, partitioned by month and dropped
   after `LOG_RETENTION_DAYS` (30). There is no sampling of successful requests in v1.
 - **Redis sizing.** `allkeys-lru` is right for the cache, but if Redis is undersized it will also evict

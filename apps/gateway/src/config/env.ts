@@ -74,9 +74,11 @@ export const envSchema = z
      * count, so it is the operator's trade to make (docs/results/anomaly-eval-csic.md).
      */
     SCHEMA_VALUE_SHAPES: bool().default(false),
+    // `fake` so a deployment that never configures a model boots and runs heuristics-only. `openai`
+    // as the default made a bare image refuse to start for want of an LLM_API_KEY nobody had asked for.
     LLM_PROVIDER: z
       .enum(['openai', 'anthropic', 'local', 'fake'])
-      .default('openai'),
+      .default('fake'),
     LLM_MODEL: z.string().min(1).optional(),
     LLM_API_KEY: z.string().min(1).optional(),
     LLM_DAILY_CALL_CAP: int().nonnegative().default(20_000),
