@@ -15,14 +15,20 @@ export interface SeedOptions {
   pepper: string;
   /** Upstream for the seeded routes; docs/04 §4 uses http://mock-upstream:3001 inside compose. */
   mockUpstreamUrl?: string;
+  /**
+   * Also create the two demo routes and the demo API key. Off by default: the admin user and the
+   * three policies are what a real deployment needs, and demo rows in a production database shadow
+   * any same-named route in routes.yaml.
+   */
+  demo?: boolean;
 }
 
 export interface SeedResult {
   adminId: string;
   policyIds: Record<'default' | 'strict' | 'generous', string>;
-  routeIds: Record<'mock' | 'orders', string>;
-  /** The raw key is available only in this return value / this seed run's stdout. */
-  demoKey: { id: string; prefix: string; raw: string };
+  routeIds: Partial<Record<'mock' | 'orders', string>>;
+  /** Present only when `demo` was requested. The raw key exists only in this return value / stdout. */
+  demoKey: { id: string; prefix: string; raw: string } | null;
 }
 
 /** Idempotent seed per docs/04 §4. Re-running rotates the demo key and prints the new one. */
@@ -55,6 +61,10 @@ export async function seed(
       create: def,
     });
     policyIds[def.name] = policy.id;
+  }
+
+  if (!opts.demo) {
+    return { adminId: admin.id, policyIds, routeIds: {}, demoKey: null };
   }
 
   const routeDefs = [
@@ -120,22 +130,33 @@ if (isMain) {
     adapter: new PrismaPg({ connectionString: env.DATABASE_URL }),
   });
   try {
+    const demo = process.argv.includes('--demo');
     const result = await seed(prisma, {
       adminEmail: env.ADMIN_EMAIL,
       adminPassword: env.ADMIN_PASSWORD,
       pepper: env.API_KEY_PEPPER,
       mockUpstreamUrl: process.env.MOCK_UPSTREAM_URL,
+      demo,
     });
     console.log(
-      `Seeded admin ${env.ADMIN_EMAIL}, ${Object.keys(result.policyIds).length} policies, ${Object.keys(result.routeIds).length} routes.`,
+      `Seeded admin ${env.ADMIN_EMAIL} and ${Object.keys(result.policyIds).length} rate-limit policies.`,
     );
-    console.log('');
-    console.log('Demo API key (shown once, store it now):');
-    console.log(`  ${result.demoKey.raw}`);
-    console.log('');
-    console.log(
-      `Try: curl -i -H "X-API-Key: ${result.demoKey.raw}" http://localhost:8080/api/orders/items`,
-    );
+    if (result.demoKey) {
+      console.log(
+        `Demo routes: ${Object.keys(result.routeIds).join(', ')} -> ${process.env.MOCK_UPSTREAM_URL ?? 'http://localhost:3001'}`,
+      );
+      console.log('');
+      console.log('Demo API key (shown once, store it now):');
+      console.log(`  ${result.demoKey.raw}`);
+      console.log('');
+      console.log(
+        `Try: curl -i -H "X-API-Key: ${result.demoKey.raw}" http://localhost:8080/api/orders/items`,
+      );
+    } else {
+      console.log('');
+      console.log('Sign in to the dashboard and add your first route under Routes.');
+      console.log('Re-run with --demo to also create the mock/orders routes and a demo API key.');
+    }
   } finally {
     await prisma.$disconnect();
   }

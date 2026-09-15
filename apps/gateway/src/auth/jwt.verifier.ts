@@ -20,6 +20,9 @@ export interface JwtVerifierOptions {
   jwks?: JWTVerifyGetKey;
   /** Accepted clock skew in seconds for exp/nbf/iat (T1: <= 60 s). */
   clockToleranceSeconds?: number;
+  /** Required `iss` / `aud`; when unset the claim is not checked. */
+  issuer?: string;
+  audience?: string;
 }
 
 /** Turn the `scope` (space-delimited, RFC 8693) or `scp`/`scopes` (array) claim into a string list. */
@@ -36,6 +39,8 @@ export class JwtVerifier {
   private readonly hsKey?: Uint8Array | KeyObject;
   private readonly jwks?: JWTVerifyGetKey;
   private readonly clockTolerance: number;
+  private readonly issuer?: string;
+  private readonly audience?: string;
 
   constructor(@Inject(ENV) env: Env | JwtVerifierOptions) {
     const opts: JwtVerifierOptions = isEnv(env)
@@ -44,8 +49,12 @@ export class JwtVerifier {
           jwks: env.JWT_JWKS_URL
             ? createRemoteJWKSet(new URL(env.JWT_JWKS_URL))
             : undefined,
+          issuer: env.JWT_ISSUER,
+          audience: env.JWT_AUDIENCE,
         }
       : env;
+    this.issuer = opts.issuer;
+    this.audience = opts.audience;
     this.hsKey = opts.hsSecret
       ? new TextEncoder().encode(opts.hsSecret)
       : undefined;
@@ -73,10 +82,13 @@ export class JwtVerifier {
       );
 
     try {
+      // jose checks iss/aud only when given, and rejects with JWTClaimValidationFailed otherwise.
       const { payload } = await jwtVerify(token, key as Uint8Array, {
         algorithms: [alg],
         clockTolerance: this.clockTolerance,
         requiredClaims: ['sub', 'exp'],
+        ...(this.issuer ? { issuer: this.issuer } : {}),
+        ...(this.audience ? { audience: this.audience } : {}),
       });
       if (typeof payload.sub !== 'string' || payload.sub.length === 0) {
         throw new AuthError('invalid', 'Token has no subject');
@@ -90,6 +102,8 @@ export class JwtVerifier {
       if (err instanceof AuthError) throw err;
       if (err instanceof joseErrors.JWTExpired)
         throw new AuthError('expired', 'Token expired');
+      if (err instanceof joseErrors.JWTClaimValidationFailed)
+        throw new AuthError('invalid', `Token ${err.claim} claim rejected`);
       if (
         err instanceof joseErrors.JWKSNoMatchingKey ||
         err instanceof joseErrors.JWKSTimeout

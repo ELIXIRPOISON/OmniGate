@@ -140,7 +140,7 @@ export class AnomalyEventsService {
     );
 
     if (count < this.env.ANOMALY_THROTTLE_EVENTS) return false;
-    if (!this.env.ANOMALY_AUTO_THROTTLE) {
+    if (!this.env.ANOMALY_AUTO_THROTTLE || !this.env.ANOMALY_ENFORCE) {
       this.logger.info(
         {
           principal,

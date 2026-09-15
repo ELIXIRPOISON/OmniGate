@@ -133,7 +133,7 @@ packages/shared                  # DTO types shared by gateway + dashboard
 
 ### ADR-005: pnpm workspaces monorepo, single Docker image for gateway+worker
 **Status:** Accepted
-**Decision:** `apps/gateway`, `apps/dashboard`, `packages/shared`. The dashboard is built to static files and served by the gateway under `/dashboard` in production (one deployable). Worker runs in-process in v1 (`WORKER_INLINE=true`).
+**Decision:** `apps/gateway`, `apps/dashboard`, `packages/shared`. The dashboard is built to static files and served by the gateway at the root of the same origin, `/`, in production (one deployable); the gateway reserves `/api`, `/admin`, `/healthz`, `/readyz` and `/metrics` and every other GET falls back to the SPA. Worker runs in-process in v1 (`WORKER_INLINE=true`).
 **Consequences:** One deploy, one URL; shared DTO types; can split later without code changes beyond env flags.
 
 ### ADR-006: Fly.io as default deploy target

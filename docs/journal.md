@@ -2,6 +2,17 @@
 
 Five lines a day: done / blocked / decided. Newest first.
 
+## 2026-09-15 (Tue, later) - "how does someone use it?" turned into an adoption audit
+
+- Asked the question the README never answered, then had five simulated adopters (VPS behind nginx, existing compose stack, security operator wanting flag-only, Kong evaluator, PaaS with managed stores) follow only the public docs. 89 agents, 79 confirmed gaps, 4 refuted. Four of five reached a first request; the PaaS deployer could not, because the only documented migration path called a Prisma CLI the image deliberately deletes.
+- The skeptics found a bug of mine from yesterday: the schema-learning gate used the full score, which now includes `unknown_param`, so once a route was warm a genuinely new parameter fired the signal, failed the gate, and could never be observed or promoted. Drift handling was dead on arrival. `learnableScore()` judges eligibility on every signal except the schema's own.
+- Shipped: `JWT_ISSUER` / `JWT_AUDIENCE` (the one blocker - a shared identity provider signs tokens for many apps with the same keys, and without `aud` every one of them was a valid credential here); `ANOMALY_ENFORCE` as one switch over every refusal, off in `compose.prod.yml` so a new deployment observes before it refuses; `seed --demo`, with the default creating only the admin and policies; an empty `routes.yaml` in the image with the demo routes moved to `routes.demo.yaml`; `compose.demo.yml` as an overlay so `compose.prod.yml` is a real template; GHCR publishing on tag.
+- Caught by running it: interpolating `${DATABASE_URL:-...}` in compose let a developer's host-side `.env` (`localhost:5433`) leak into the migrate container, which promptly could not reach the database. The overrides are `MANAGED_DATABASE_URL` / `MANAGED_REDIS_URL` now, named so the dev file cannot collide.
+- Caught by reading the code before writing the doc: `POST /routes/reload` re-merges the database over the routes loaded at boot; it does not re-read the file. I had written that it did. Fixed in three places before it shipped.
+- Wrote docs/15-ADOPTING.md: five recipes with real field names, the five facts every recipe relies on, a route-field table for both forms, "putting it on the internet", operating notes, and a what-it-does-not-do list in one place. README now leads strangers there instead of to the planning pack, and says plainly that only auth fails closed.
+- Verified: 317 tests, 27 smoke checks on the demo overlay, and the production file alone booting with routes:0, an admin-only seed, no mock, observe-only, loopback bind, and a route created through the API serving traffic.
+- Next: round-two audit against the new docs, then the v1.0.0 tag decision.
+
 ## 2026-09-15 (Tue) - Sprint 9: hardening, metrics, diagram, v1.0
 
 - Done: S9-03 hardening. Refuses to boot in production on any value .env.example ships with. Proved by the guard stopping this repo's own prod stack until real secrets were generated. Security headers cover the dashboard and control plane and deliberately not /api - a gateway that rewrites an upstream's CSP breaks the app it is meant to be transparent to, and the smoke test asserts a proxied response comes back untouched.

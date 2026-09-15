@@ -66,18 +66,28 @@ Implementation notes (Sprint 2):
 | `GET /healthz` | process alive | `{"status":"ok"}` |
 | `GET /readyz` | Redis PING ok **and** Postgres `SELECT 1` ok | `{"status":"ok","redis":"ok","postgres":"ok","routes":12}` (503 otherwise) |
 
-### Route config (`routes.yaml`, Phase 1; mirrored by DB rows in Phase 4)
+### Route config (`routes.yaml` and `POST /admin/v1/routes`)
+
+Both forms carry the same fields; the file uses snake_case, the API camelCase. Only `service` and
+`upstream` are required. A database route and a file route with the same `service` resolve to the
+database one. The file is read once at boot; `POST /admin/v1/routes/reload` re-merges database routes over it. The full field table
+with defaults is in [15-ADOPTING.md](15-ADOPTING.md).
+
 ```yaml
 routes:
-  - service: orders
-    upstream: http://mock-upstream:3001
-    strip_prefix: true            # /api/orders/x → /x
-    auth_required: true
-    scopes: [orders:read]         # optional; JWT scope or API-key scope must include one
-    rate_limit: { window_seconds: 60, max_requests: 100 }
-    cache_ttl_seconds: 30         # 0 = disabled; GET only
-    anomaly_mode: async           # off | async | sync
-    timeout_ms: 30000
+  - service: orders                   # required; ^[a-z0-9][a-z0-9-]{0,62}$, reachable at /api/orders
+    upstream: http://orders:3000      # required; http or https
+    strip_prefix: true                # default true: /api/orders/x -> /x
+    methods: ['*']                    # default any
+    auth_required: true               # default true
+    scopes: [orders:read]             # default []; credential must carry one; naming any implies auth
+    rate_limit: { window_seconds: 60, max_requests: 100 }   # per principal; else the key's policy, else RL_DEFAULT_*
+                                      # anonymous callers are additionally capped per IP by RL_ANON_MAX
+    cache_ttl_seconds: 30             # default 0 = off; GET/HEAD only
+    cache_vary_on_principal: true     # default; false shares one entry for public data
+    anomaly_mode: async               # default; off | async | sync
+    block_on_heuristic: false         # file only; 403 on an injection match scoring >= 0.95
+    timeout_ms: 30000                 # default UPSTREAM_TIMEOUT_MS
 ```
 
 ## 2. Admin API (control plane) — `/admin/v1`
@@ -120,7 +130,7 @@ All endpoints require `Authorization: Bearer <admin JWT>` except `POST /auth/log
 | POST | `/routes` | same shape as yaml entry; validates upstream is `http(s)://` and not a private IP unless `ALLOW_PRIVATE_UPSTREAMS=true` |
 | PATCH | `/routes/:id` | |
 | DELETE | `/routes/:id` | |
-| POST | `/routes/:id/cache/purge` | → `{routeId, deletedKeys}`. Live since Sprint 4: until the admin login ships (Sprint 7) it is protected by `Authorization: Bearer <ADMIN_TOKEN>` (static env var; unset = admin API answers 503) and `:id` is the route's `service` name. |
+| POST | `/routes/:id/cache/purge` | → `{routeId, deletedKeys}`; `:id` may be a route id or a `service` name, since file routes have no row |
 | POST | `/routes/reload` | force registry refresh |
 
 ### Rate-limit policies

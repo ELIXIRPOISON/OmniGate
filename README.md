@@ -23,18 +23,20 @@ requests. One command gets you the whole thing, dashboard included, on port 8080
 cache (GET) → anomaly screen → proxy. Everything slower than a millisecond happens after the
 response has been sent: classification, enforcement bookkeeping and the buffered audit write.
 
-Auth and rate limiting are the only stages that fail closed. Everything else degrades: Redis down
-means no limits and no cache rather than no service, and a model that times out or errors allows the
-request.
+Auth is the only stage that fails closed. Everything else degrades rather than refuses: Redis down
+means no limits and no cache, with `X-RateLimit-Degraded: true` on the response (`RL_FAIL_OPEN=false`
+answers 503 instead), and a model that times out or errors allows the request.
 
-Full design: [`docs/02-ARCHITECTURE.md`](docs/02-ARCHITECTURE.md). Start with
-[`docs/00-INDEX.md`](docs/00-INDEX.md).
+Want it in front of your own services? Start with [`docs/15-ADOPTING.md`](docs/15-ADOPTING.md).
+The design is in [`docs/02-ARCHITECTURE.md`](docs/02-ARCHITECTURE.md); the rest of `docs/` is the
+plan the project was built from and reads as one.
 
 ## Production hardening
 
-The image refuses to boot in production on any value `.env.example` ships with, including the sample
-admin password. A deploy that silently keeps the demo credentials is worse than one that fails
-loudly, because nobody finds out.
+The image refuses to boot in production on the four placeholder secrets `.env.example` ships with
+(`JWT_SECRET`, `API_KEY_PEPPER`, `ADMIN_PASSWORD`, `ADMIN_JWT_SECRET`) and on `EXPOSE_ANOMALY_SCORE=true`.
+A deploy that silently keeps the demo credentials is worse than one that fails loudly, because nobody
+finds out.
 
 Security headers cover the dashboard and the control plane and are deliberately **not** applied to
 `/api`. Those responses belong to the upstream, and a gateway that rewrites an upstream's CSP or
@@ -67,18 +69,36 @@ docs/               PRD, architecture + ADRs, specs, delivery plan, journal
 
 ## Quick start
 
-One command gives you the whole product, dashboard included, on a single port.
+The whole product against a bundled mock service, dashboard included, on one port:
 
 ```bash
-cp .env.example .env                                                  # set the four secrets it asks for
-docker compose -f compose.prod.yml up --build -d                      # gateway + dashboard :8080, redis, postgres
-docker compose -f compose.prod.yml exec gateway node dist/prisma/seed.js   # prints a demo API key ONCE
-open http://localhost:8080                                            # sign in with ADMIN_EMAIL / ADMIN_PASSWORD
+cp .env.example .env    # replace JWT_SECRET, API_KEY_PEPPER, ADMIN_PASSWORD, ADMIN_JWT_SECRET (openssl rand -hex 32)
+docker compose -f compose.prod.yml -f compose.demo.yml up --build -d
+docker compose -f compose.prod.yml -f compose.demo.yml exec gateway node dist/prisma/seed.js --demo
+open http://localhost:8080        # sign in with ADMIN_EMAIL / ADMIN_PASSWORD
 ```
 
-The gateway serves the built dashboard itself, so there is no second server to start and no CORS to
-configure. `sh tools/smoke-prod.sh $KEY` checks the whole thing end to end: proxying, auth, rate
-limiting, the admin API and the dashboard.
+`compose.demo.yml` is an overlay: it adds the mock upstream, swaps in `routes.demo.yaml` and turns
+enforcement on so you can watch a 403 happen. `--demo` on the seed adds two demo routes and a demo API
+key. Leave both off and you have a production template with an empty route table, which is the point.
+
+`sh tools/smoke-prod.sh $KEY` checks the running stack end to end: proxying, auth, the anonymous cap
+tripping, the cache, the admin API, the dashboard and the security headers. 27 checks.
+
+## Putting it in front of your own service
+
+```bash
+cp .env.example .env                                   # the same four secrets
+docker compose -f compose.prod.yml up -d               # no mock, empty routes, observe-only anomaly mode
+docker compose -f compose.prod.yml exec gateway node dist/prisma/seed.js    # admin + policies, nothing else
+open http://localhost:8080                             # Routes -> Add route -> point it at your service
+```
+
+A service on the same host is `http://host.docker.internal:4000`; one in your compose stack is its
+service name. Clients then call `/api/{service}/...` with an `X-API-Key` minted on the API keys page,
+or a JWT from your identity provider. The recipes for a VPS behind nginx, an existing compose stack,
+flag-only anomaly mode, external JWKS and a PaaS with managed stores are in
+[`docs/15-ADOPTING.md`](docs/15-ADOPTING.md).
 
 For development, `compose.yml` runs the gateway with a bind mount and `pnpm dev:dashboard` serves the
 UI on :5173 with hot reload, proxying the control plane to :8080.
@@ -87,7 +107,7 @@ UI on :5173 with hot reload, proxying the control plane to :8080.
 
 ```bash
 docker compose up --build -d                 # dev stack: gateway :8080, mock upstream :3001, redis, postgres
-docker compose exec gateway pnpm seed        # creates admin, policies, routes and prints a demo API key ONCE
+docker compose exec gateway pnpm seed -- --demo   # admin, policies, demo routes; prints a demo API key ONCE
 export KEY=gw_live_...                       # paste the key from the seed output
 
 curl -i localhost:8080/api/mock/items                      # open route: proxied, X-Request-Id on the response
@@ -109,7 +129,7 @@ curl -i -H "Authorization: Bearer $TOKEN" localhost:8080/api/orders/items     # 
 Rate limiting is visible on every response:
 
 ```bash
-for i in $(seq 1 31); do curl -s -o /dev/null -w "%{http_code} " localhost:8080/api/mock/items; done; echo   # 30 x 200 then 429
+for i in $(seq 1 31); do curl -s -o /dev/null -w "%{http_code} " localhost:8080/api/mock/items; done; echo   # 30 x 200 then 429: the route allows 100/min, but anonymous callers are also capped per IP by RL_ANON_MAX=30
 curl -si localhost:8080/api/mock/items | grep -iE '^HTTP|x-ratelimit|retry-after'
 ```
 
@@ -125,7 +145,7 @@ ADMIN=$(curl -s -X POST -H 'content-type: application/json' \
 curl -s -X POST -H "Authorization: Bearer $ADMIN" localhost:8080/admin/v1/routes/catalog/cache/purge        # {"routeId":"catalog","deletedKeys":n}
 ```
 
-Every request is scored inline by eight heuristics (sub-millisecond) and suspicious ones are queued for the LLM stage. In development the score is exposed as a header:
+Every request is scored inline by nine signals (sub-millisecond) and suspicious ones are queued for the LLM stage. In development the score is exposed as a header:
 
 ```bash
 curl -si "localhost:8080/api/mock/items?id=1'%20OR%201=1--" | grep -i x-anomaly    # X-Anomaly-Score: 0.901, injection_patterns=1.00, queued: gate
@@ -170,7 +190,7 @@ with the parameter schema learned from a training corpus and every scored reques
 | + learned value shapes (opt in) | 0.772 | 28 / 36,000 | 0.999 |
 
 The strongest signal in the gateway is the cheapest: knowing which parameter names each route
-legitimately accepts, learned from traffic. On its own it detects more than all eight of the original
+legitimately accepts, learned from traffic. On its own it detects more than the eight original pattern and behavioural
 signals combined. `idA=1` where the route only ever accepts `id` is invisible to any pattern and
 obvious to a schema.
 

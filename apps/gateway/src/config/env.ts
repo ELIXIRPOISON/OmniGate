@@ -23,6 +23,13 @@ export const envSchema = z
     ALLOW_PRIVATE_UPSTREAMS: bool().default(false),
 
     JWT_SECRET: z.string().min(32).optional(),
+    /**
+     * Expected `iss` and `aud` claims. Optional, but without them any token the configured key or
+     * JWKS can verify is accepted, which for a shared identity provider means tokens minted for a
+     * different application. Set both when JWT_JWKS_URL points at a provider you do not own.
+     */
+    JWT_ISSUER: z.string().min(1).optional(),
+    JWT_AUDIENCE: z.string().min(1).optional(),
     JWT_JWKS_URL: z.url().optional(),
     API_KEY_PEPPER: z.string().min(16),
 
@@ -46,6 +53,13 @@ export const envSchema = z
     ANOMALY_GATE_THRESHOLD: ratio().default(0.4),
     ANOMALY_BLOCK_THRESHOLD: ratio().default(0.9),
     ANOMALY_AUTO_THROTTLE: bool().default(false),
+    /**
+     * Global switch for every refusal the anomaly stage can make: the heuristic fast block, a sync
+     * route's 403 and the reactive throttle. Off means observe only - everything is still scored,
+     * recorded and reviewable, nothing is refused - regardless of per-route settings. Run a new
+     * deployment with this off until the review queue has earned trust.
+     */
+    ANOMALY_ENFORCE: bool().default(true),
     /** Learned per-route parameter schema (docs/results/anomaly-eval-csic.md). */
     SCHEMA_LEARNING: bool().default(true),
     /** Successful, unremarkable requests a route must contribute before the signal activates. */

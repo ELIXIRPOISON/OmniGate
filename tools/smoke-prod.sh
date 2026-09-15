@@ -2,8 +2,8 @@
 # End-to-end check against the production image. Proves the container really serves the whole
 # product: the proxy, auth, rate limiting, the cache, the admin API and the dashboard.
 #
-#   docker compose -f compose.prod.yml up -d
-#   docker compose -f compose.prod.yml exec -T gateway node dist/prisma/seed.js
+#   docker compose -f compose.prod.yml -f compose.demo.yml up -d
+#   docker compose -f compose.prod.yml -f compose.demo.yml exec -T gateway node dist/prisma/seed.js --demo
 #   sh tools/smoke-prod.sh "$KEY"
 set -e
 BASE="${BASE:-http://localhost:8080}"

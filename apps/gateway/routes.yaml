@@ -1,36 +1,10 @@
-# Bootstrap route registry, loaded at boot (FR-1.6). DB-backed routes arrive in Phase 4.
-# Schema: docs/03-API-SPEC.md "Route config". Seed equivalents: docs/04-DATA-MODEL.md section 4.
+# Bootstrap route registry, read once at boot. Empty on purpose: this is the file the production
+# image ships, and a gateway in front of your services should start with none of ours.
 #
-# ${VAR:-default} placeholders are expanded from the environment, so this one file works both
-# on your machine (localhost) and inside docker compose (MOCK_UPSTREAM_URL=http://mock-upstream:3001).
-routes:
-  - service: mock
-    upstream: ${MOCK_UPSTREAM_URL:-http://localhost:3001}
-    strip_prefix: true
-    auth_required: false
-    rate_limit: { window_seconds: 60, max_requests: 100 }
-    cache_ttl_seconds: 15
-    anomaly_mode: async
-
-  - service: orders
-    upstream: ${MOCK_UPSTREAM_URL:-http://localhost:3001}
-    strip_prefix: true
-    auth_required: true
-    scopes: [orders:read]
-    rate_limit: { window_seconds: 60, max_requests: 100 }
-    cache_ttl_seconds: 30
-    # Opt-in synchronous screening: the verdict is awaited for up to LLM_TIMEOUT_SYNC_MS and a score
-    # at or above ANOMALY_BLOCK_THRESHOLD answers 403. Every other route stays asynchronous.
-    anomaly_mode: sync
-    block_on_heuristic: true
-
-  # Public catalogue data: identical for every caller, so one shared cache entry per path
-  # (cache_vary_on_principal: false) and a policy generous enough for the k6 cache scenario.
-  - service: catalog
-    upstream: ${MOCK_UPSTREAM_URL:-http://localhost:3001}
-    strip_prefix: true
-    auth_required: true
-    rate_limit: { window_seconds: 60, max_requests: 5000 }
-    cache_ttl_seconds: 30
-    cache_vary_on_principal: false
-    anomaly_mode: async
+# Add routes in the dashboard (Routes -> Add route) or with POST /admin/v1/routes; those live in the
+# database, take effect immediately and override a same-named entry here. Use this file instead when
+# routes belong in version control: see docs/15-ADOPTING.md for the fields and precedence, and mount
+# your copy over /app/apps/gateway/routes.yaml or point ROUTES_FILE at it.
+#
+# The demo stack uses routes.demo.yaml.
+routes: []

@@ -129,3 +129,52 @@ describe('scopesFromClaims', () => {
     expect(scopesFromClaims({})).toEqual([]);
   });
 });
+
+describe('JwtVerifier (issuer and audience)', () => {
+  const strict = new JwtVerifier({
+    hsSecret: secret,
+    issuer: 'https://idp.example.com/',
+    audience: 'omnigate',
+  });
+
+  it('accepts a token carrying the expected iss and aud', async () => {
+    const token = await new SignJWT({ sub: 'alice' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt()
+      .setIssuer('https://idp.example.com/')
+      .setAudience('omnigate')
+      .setExpirationTime('5m')
+      .sign(new TextEncoder().encode(secret));
+    await expect(strict.verify(token)).resolves.toMatchObject({ id: 'alice' });
+  });
+
+  it('rejects a token minted for another audience even though the signature is valid', async () => {
+    // The whole point: a shared identity provider signs tokens for many applications with the same
+    // key. Without an aud check, every one of them is a valid credential here.
+    const token = await new SignJWT({ sub: 'alice' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt()
+      .setIssuer('https://idp.example.com/')
+      .setAudience('some-other-app')
+      .setExpirationTime('5m')
+      .sign(new TextEncoder().encode(secret));
+    await expect(strict.verify(token)).rejects.toMatchObject({ reason: 'invalid' });
+  });
+
+  it('rejects a token from another issuer and one with the claims missing', async () => {
+    const wrongIss = await new SignJWT({ sub: 'alice' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt()
+      .setIssuer('https://evil.example.com/')
+      .setAudience('omnigate')
+      .setExpirationTime('5m')
+      .sign(new TextEncoder().encode(secret));
+    await expect(strict.verify(wrongIss)).rejects.toBeInstanceOf(AuthError);
+    await expect(strict.verify(await hs({ sub: 'alice' }))).rejects.toBeInstanceOf(AuthError);
+  });
+
+  it('does not check the claims when they are not configured', async () => {
+    const lax = new JwtVerifier({ hsSecret: secret });
+    await expect(lax.verify(await hs({ sub: 'alice' }))).resolves.toMatchObject({ id: 'alice' });
+  });
+});

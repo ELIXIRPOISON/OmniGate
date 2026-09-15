@@ -3,7 +3,7 @@
 ## 1. Stack
 React 18 + Vite + TypeScript · TanStack Query (10 s `refetchInterval`) · Recharts · Tailwind · React Router · zod for API response validation · Vitest + Testing Library. Types imported from `packages/shared`.
 
-Built to `apps/dashboard/dist`, served by the gateway at `/dashboard` (ADR-005). Dev: Vite on `:5173` with proxy to `:8080/admin`.
+Built to `apps/dashboard/dist`, served by the gateway at `/` (ADR-005). Dev: Vite on `:5173` with proxy to `:8080/admin`.
 
 > **Implemented in Sprint 8.** Stack as shipped: React 19 + Vite + Tailwind 4 + TanStack Query +
 > Recharts + framer-motion, in a shadcn-style layout (`components/ui`, `lib/utils`, `@/*` alias).

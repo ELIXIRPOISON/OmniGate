@@ -38,6 +38,7 @@ Weighted signals, each 0–1, combined as `1 - Π(1 - wᵢ·sᵢ)` (noisy-OR) so
 | `ua_anomaly` | Bots | missing UA, known scanner UAs (`sqlmap`, `nikto`, `python-requests` on browser routes) | 0.5 |
 | `auth_failures` | Credential stuffing | 401s per IP in last 60 s > 10 | 0.7 |
 | `method_mismatch` | Probing | method not in route.methods | 0.3 |
+| `unknown_param` | Parameter tampering, probing | a parameter name the route has never legitimately accepted, from the learned per-route schema (`schema.service.ts`); 0.85 for one unknown name, 1.0 for two or more; silent during warmup and on unmodellable routes; with `SCHEMA_VALUE_SHAPES` also a value unlike anything that parameter has carried | 0.85 |
 
 Thresholds live in `anomaly.config.ts`; every signal is unit-tested with positive and negative fixtures.
 
@@ -128,6 +129,16 @@ Calibration: benign ≤ 0.3, suspicious 0.3–0.7, malicious ≥ 0.7.
 | `async` (default) | Store event. If a principal accumulates ≥ `ANOMALY_THROTTLE_EVENTS` (3) events with score ≥ 0.7 in `ANOMALY_THROTTLE_WINDOW_S` (300) → `SET throttle:{principal} 1 EX 600` (only when `ANOMALY_AUTO_THROTTLE=true`) |
 | `sync` | Await verdict; `score ≥ ANOMALY_BLOCK_THRESHOLD` (0.9) → 403 `https://gw/errors/forbidden` with `detail: "Request blocked by anomaly policy"`; timeout/error → allow + log |
 | Any | Heuristic score >= 0.95 with `injection_patterns` = 1 on a route with `block_on_heuristic: true` -> 403 without calling the model (fast path for obvious payloads) |
+
+### 7.0 Observe-only: `ANOMALY_ENFORCE`
+
+Exactly three mechanisms can turn a finding into a refusal: a `sync` route's 403 at
+`ANOMALY_BLOCK_THRESHOLD`, a file route's `block_on_heuristic` fast block, and the reactive throttle
+under `ANOMALY_AUTO_THROTTLE`. `ANOMALY_ENFORCE=false` disables all three at once regardless of
+per-route settings; scoring, recording, classification and the review queue continue unchanged.
+`compose.prod.yml` ships with it off so a new deployment observes before it refuses. The score every
+threshold compares is the noisy-OR of the signal table in section 4, escalated but never lowered by a
+model verdict (`anomaly/combine.ts`).
 
 ### 7.1 Implementation notes (Sprint 6)
 - `async` (default): the queue worker classifies, writes `anomaly_events`, then counts the event in `anomaly:hits:{principal}` (sorted set, `ANOMALY_THROTTLE_WINDOW_S`). Reaching `ANOMALY_THROTTLE_EVENTS` entries at score >= 0.7 sets `throttle:{principal}` for `ANOMALY_THROTTLE_SECONDS`, which the RateLimitGuard already honours: the next request gets 429 before any bucket is touched. With `ANOMALY_AUTO_THROTTLE=false` (the default) the decision is logged and not applied.

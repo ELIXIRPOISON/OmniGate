@@ -28,6 +28,7 @@ Read in this order on day 1, then keep `08-DELIVERY-PLAN.md` open every day.
 | 12 | **README-TEMPLATE** | The public README you'll ship with the repo | Sprint 9 |
 | 13 | **DESIGN-SYSTEM** | Tokens, chart colour and how it was validated | Sprint 8 |
 | 14 | **RETRO** | What the plan got wrong, and the v1.1 backlog | Sprint 9 |
+| 15 | **ADOPTING** | Putting it in front of your own services; the page to read first if you are not building it | Read first |
 
 ---
 

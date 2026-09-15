@@ -1,54 +1,81 @@
-# Production stack: the built image, Postgres and Redis. Use this to smoke-test the image that gets
-# deployed, and as the one-command way to run the whole product locally.
+# Production stack: the built image in front of YOUR services, plus Postgres and Redis.
 #
-#   docker compose -f compose.prod.yml up --build -d
-#   docker compose -f compose.prod.yml exec gateway node dist/prisma/seed.js   # prints a demo API key once
-#   open http://localhost:8080
+#   cp .env.example .env            # set JWT_SECRET, API_KEY_PEPPER, ADMIN_PASSWORD, ADMIN_JWT_SECRET
+#   docker compose -f compose.prod.yml up -d
+#   docker compose -f compose.prod.yml exec gateway node dist/prisma/seed.js
+#   open http://localhost:8080      # sign in, Routes -> Add route, point it at your service
 #
-# Unlike compose.yml there are no bind mounts and no dev server: the gateway serves the built
-# dashboard itself, so the whole product is on port 8080.
+# Nothing here is a demo: routes.yaml in the image is empty, the seed creates only the admin user and
+# the three rate-limit policies, and there is no mock upstream. For the five-minute tour, layer the
+# demo overlay on top:
+#
+#   docker compose -f compose.prod.yml -f compose.demo.yml up -d
+#   docker compose -f compose.prod.yml -f compose.demo.yml exec gateway node dist/prisma/seed.js --demo
+#
+# The gateway serves plain HTTP on 8080 and does not terminate TLS. Put Caddy, nginx or your
+# platform's load balancer in front, keep 8080 bound to localhost (the default below), and only then
+# set TRUST_PROXY=true so X-Forwarded-For is believed. See docs/15-ADOPTING.md.
 
 services:
   gateway:
+    # Pull the published image, or build locally with `--build`.
+    image: ${OMNIGATE_IMAGE:-ghcr.io/elixirpoison/omnigate:latest}
     build:
       context: .
       dockerfile: Dockerfile
-    image: omnigate:local
     restart: unless-stopped
     ports:
-      - '8080:8080'
+      # Bound to loopback on purpose: a reverse proxy terminates TLS and forwards here. Set BIND=0.0.0.0
+      # only if the host firewall is doing that job instead.
+      - '${BIND:-127.0.0.1}:${PORT:-8080}:8080'
     env_file:
       - path: .env
         required: false
+    extra_hosts:
+      # Lets a route target a service running on the host itself: upstream http://host.docker.internal:4000
+      - 'host.docker.internal:host-gateway'
     environment:
       PORT: 8080
       NODE_ENV: production
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      DATABASE_URL: postgresql://omnigate:omnigate@postgres:5432/omnigate
-      REDIS_URL: redis://redis:6379
-      MOCK_UPSTREAM_URL: http://mock-upstream:3001
-      ROUTES_FILE: ./routes.yaml
-      ALLOW_PRIVATE_UPSTREAMS: 'true'
-      # Off in production: the score is an internal signal, not something callers should see.
+      # Set MANAGED_DATABASE_URL / MANAGED_REDIS_URL to use managed stores instead of the bundled ones.
+      # Named distinctly on purpose: a developer's .env carries host-side DATABASE_URL/REDIS_URL for
+      # running the gateway outside Docker, and those must not leak into the containers.
+      DATABASE_URL: ${MANAGED_DATABASE_URL:-postgresql://omnigate:${POSTGRES_PASSWORD:-omnigate}@postgres:5432/omnigate}
+      REDIS_URL: ${MANAGED_REDIS_URL:-redis://redis:6379}
+      ROUTES_FILE: ${ROUTES_FILE:-./routes.yaml}
+      # On: routes may target container names, host.docker.internal and RFC1918 addresses. Off, the SSRF
+      # guard refuses any upstream that resolves to a private or loopback address.
+      ALLOW_PRIVATE_UPSTREAMS: ${ALLOW_PRIVATE_UPSTREAMS:-true}
+      # Off in production: the score tells a caller how close their probe came to the threshold.
       EXPOSE_ANOMALY_SCORE: 'false'
-      TRUST_PROXY: ${TRUST_PROXY:-true}
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env, 32+ random bytes}
-      API_KEY_PEPPER: ${API_KEY_PEPPER:?set API_KEY_PEPPER in .env}
+      # True ONLY when a reverse proxy is the sole thing that can reach 8080. With it on and 8080 exposed
+      # directly, clients choose their own IP via X-Forwarded-For and every per-IP limit stops working.
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      # One of JWT_SECRET (HS256) or JWT_JWKS_URL (RS256, your identity provider) is required; env.ts
+      # refuses to boot with neither. Set JWT_ISSUER and JWT_AUDIENCE whenever the JWKS is not yours alone.
+      JWT_SECRET: ${JWT_SECRET:-}
+      JWT_JWKS_URL: ${JWT_JWKS_URL:-}
+      JWT_ISSUER: ${JWT_ISSUER:-}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-}
+      API_KEY_PEPPER: ${API_KEY_PEPPER:?set API_KEY_PEPPER in .env (openssl rand -hex 32)}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
       ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:?set ADMIN_JWT_SECRET in .env, must differ from JWT_SECRET}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
       LLM_PROVIDER: ${LLM_PROVIDER:-fake}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
+      # Observe-only until the review queue has earned trust: everything is scored and recorded,
+      # nothing is refused. Flip to true per docs/06 section 7.2.
+      ANOMALY_ENFORCE: ${ANOMALY_ENFORCE:-false}
       ANOMALY_AUTO_THROTTLE: ${ANOMALY_AUTO_THROTTLE:-false}
-      METRICS_TOKEN: ${METRICS_TOKEN:-}
       SCHEMA_VALUE_SHAPES: ${SCHEMA_VALUE_SHAPES:-false}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
     depends_on:
       migrate:
         condition: service_completed_successfully
-      mock-upstream:
-        condition: service_started
       redis:
         condition: service_healthy
       postgres:
@@ -60,37 +87,26 @@ services:
       retries: 5
       start_period: 30s
 
-  # Applies migrations and exits. The gateway waits for it, so the runtime image never needs the
-  # Prisma CLI. On Fly this is the release command instead.
+  # Applies migrations and exits; the gateway waits for it. Point DATABASE_URL at a managed database
+  # and this is also how you migrate it from anywhere Docker runs.
   migrate:
+    image: ${OMNIGATE_MIGRATE_IMAGE:-ghcr.io/elixirpoison/omnigate-migrate:latest}
     build:
       context: .
       dockerfile: Dockerfile
       target: migrate
-    image: omnigate-migrate:local
     environment:
-      DATABASE_URL: postgresql://omnigate:omnigate@postgres:5432/omnigate
+      DATABASE_URL: ${MANAGED_DATABASE_URL:-postgresql://omnigate:${POSTGRES_PASSWORD:-omnigate}@postgres:5432/omnigate}
     depends_on:
       postgres:
         condition: service_healthy
 
-  mock-upstream:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    restart: unless-stopped
-    command: >
-      sh -c "pnpm --filter @omnigate/mock-upstream build
-      && pnpm --filter @omnigate/mock-upstream start"
-    environment:
-      PORT: 3001
-    expose:
-      - '3001'
-
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    # allkeys-lru is right for the cache; limits, sender stats and learned schemas carry their own TTLs
+    # and are rebuilt if evicted. Size it above your hot set or eviction will silently shorten windows.
+    command: redis-server --maxmemory ${REDIS_MAXMEMORY:-256mb} --maxmemory-policy allkeys-lru
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
@@ -102,7 +118,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: omnigate
-      POSTGRES_PASSWORD: omnigate
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-omnigate}
       POSTGRES_DB: omnigate
     volumes:
       - pgdata-prod:/var/lib/postgresql/data

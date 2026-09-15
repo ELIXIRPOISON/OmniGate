@@ -22,7 +22,7 @@ loaded at run time.
 
 **Migrations run from their own stage.** `--target migrate` builds a one-shot container whose only
 job is `prisma migrate deploy`. In compose the gateway waits on it with
-`condition: service_completed_successfully`; on Fly it is the release command.
+`condition: service_completed_successfully`; on Fly run it as a pre-deploy step from your machine.
 
 ```bash
 docker build -t omnigate .                            # runtime image
@@ -54,57 +54,90 @@ dashboard is not in this file; run `pnpm dev:dashboard` for hot reload.
 postgres. This is both the local smoke test of the deployable image and the one-command way to run
 the whole product.
 
-## 3. Environment variables (`.env.example`)
-| Var | Required | Default | Purpose |
-|-----|----------|---------|---------|
-| `PORT` | | 8080 | |
-| `NODE_ENV` | | development | |
-| `LOG_LEVEL` | | info | pino |
-| `TRUST_PROXY` | | false | set `true` behind Fly/ALB |
-| `DATABASE_URL` | ✔ | | Postgres |
-| `REDIS_URL` | ✔ | | `rediss://` on Upstash |
-| `ROUTES_FILE` | | ./routes.yaml | bootstrap routes |
-| `JWT_SECRET` | one of | | HS256 |
-| `JWT_JWKS_URL` | one of | | RS256 |
-| `API_KEY_PEPPER` | ✔ | | 32+ random bytes; rotating it invalidates all keys |
-| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | ✔ (seed) | | initial admin |
-| `ADMIN_JWT_SECRET` | ✔ | | separate from `JWT_SECRET` |
-| `CORS_ORIGIN` | | `http://localhost:5173` | dashboard origin |
-| `MAX_BODY_BYTES` | | 1048576 | |
-| `UPSTREAM_TIMEOUT_MS` | | 30000 | |
-| `ALLOW_PRIVATE_UPSTREAMS` | | false (true in dev) | SSRF guard |
-| `RL_*`, `CACHE_*` | | see `05 §3` | |
-| `ANOMALY_SAMPLE_RATE` | | 0.02 | |
-| `ANOMALY_GATE_THRESHOLD` | | 0.4 | |
-| `ANOMALY_BLOCK_THRESHOLD` | | 0.9 | |
-| `ANOMALY_AUTO_THROTTLE` | | false | |
-| `LLM_PROVIDER` | | openai | `openai` \| `anthropic` \| `local` \| `fake` |
-| `LLM_MODEL` | | (provider default) | |
-| `LLM_API_KEY` | when provider ≠ fake | | |
-| `LLM_DAILY_CALL_CAP` | | 20000 | |
-| `WORKER_INLINE` | | true | run BullMQ processors in-process |
-| `LOG_RETENTION_DAYS` | | 30 | |
-| `EXPOSE_ANOMALY_SCORE` | | false | dev-only response header |
+## 3. Environment variables
 
-## 4. First deploy (Fly.io)
+Generated from `apps/gateway/src/config/env.ts`; `.env.example` carries the same list with comments.
+The four secrets `JWT_SECRET`, `API_KEY_PEPPER`, `ADMIN_PASSWORD` and `ADMIN_JWT_SECRET` must not be
+the placeholder values in production or the gateway refuses to boot.
+
+| Var | Required | Default | Purpose |
+|---|---|---|---|
+| `JWT_ISSUER` |  |  | required iss claim |
+| `JWT_AUDIENCE` |  |  | required aud claim |
+| `JWT_JWKS_URL` |  |  | RS256 key set from your identity provider |
+| `API_KEY_PEPPER` | ✔ |  | API key hashing; rotating it invalidates every key |
+| `ADMIN_PASSWORD` | ✔ |  | seeded admin; boot refuses "admin" in production |
+| `ADMIN_JWT_SECRET` | ✔ |  | admin session signing; must differ from JWT_SECRET |
+| `CORS_ORIGIN` |  | `http://localhost:5173` | control-plane CORS, only needed if the dashboard is hosted elsewhere |
+| `UPSTREAM_TIMEOUT_MS` |  | `30_000` | default route timeout |
+| `RL_DEFAULT_MAX` |  | `100` | default limiter max |
+| `RL_ANON_MAX` |  | `30` | extra per-IP cap for anonymous callers on open routes |
+| `RL_COUNT_CACHE_HITS` |  | `true` | whether a cache hit consumes rate-limit budget |
+| `RL_FAIL_OPEN` |  | `true` | Redis down: allow (true) or 503 |
+| `CACHE_MAX_BODY_BYTES` |  | `262144` | largest response body the cache will store |
+| `CACHE_DEFAULT_VARY_ON_PRINCIPAL` |  | `true` | default for a route's `cache_vary_on_principal` |
+| `ANOMALY_GATE_THRESHOLD` |  | `0.4` | score at which a request is recorded and classified |
+| `ANOMALY_BLOCK_THRESHOLD` |  | `0.9` | sync-mode 403 threshold |
+| `ANOMALY_AUTO_THROTTLE` |  | `false` | reactive throttle on repeat offenders |
+| `LLM_PROVIDER` |  | `openai` | openai | anthropic | local | fake |
+| `LLM_MODEL` |  |  | provider default when unset |
+| `LLM_API_KEY` |  |  | required unless fake or local |
+| `LLM_DAILY_CALL_CAP` |  | `20_000` | classification budget per day |
+| `LLM_MAX_OUTPUT_TOKENS` |  | `200` | per classification |
+| `LLM_TIMEOUT_ASYNC_MS` |  | `5_000` | async classification timeout |
+| `ANOMALY_THROTTLE_EVENTS` |  | `3` | events before throttling |
+| `ANOMALY_THROTTLE_WINDOW_S` |  | `300` | window for those events |
+| `ANOMALY_THROTTLE_SECONDS` |  | `600` | throttle duration |
+| `LOG_RETENTION_DAYS` |  | `30` | audit partitions kept |
+| `EXPOSE_ANOMALY_SCORE` |  | `false` | dev-only response header; refused in production |
+
+## 4. First deploy
+
+The adopter-facing recipes live in [15-ADOPTING.md](15-ADOPTING.md): a VPS behind nginx, an existing
+compose stack, flag-only anomaly mode, external JWKS, and a PaaS with managed stores. This section
+keeps the platform specifics.
+
+### Putting it on the internet
+
+The gateway serves plain HTTP on `PORT` and does not terminate TLS. Put Caddy, nginx or the platform
+edge in front, keep 8080 bound to loopback or a private network (`compose.prod.yml` does this by
+default), and only then set `TRUST_PROXY=true`. With it on and 8080 reachable directly, a client picks
+its own `X-Forwarded-For` and every per-IP control stops working. The dashboard is served at `/`, the
+control plane under `/admin`; deny both at the proxy for non-office addresses if you want them off the
+public internet while `/api` stays open.
+
+### Migrations without compose
+
+The runtime image deliberately has no Prisma CLI, so nothing inside it can migrate. Run the migrate
+image against the database from anywhere Docker runs, before a deploy that carries a migration:
+
 ```bash
-fly launch --no-deploy --name omnigate --region sin          # writes fly.toml
+docker run --rm -e DATABASE_URL='postgresql://...' ghcr.io/elixirpoison/omnigate-migrate:latest
+```
+
+### Fly.io
+
+```bash
+fly launch --no-deploy --name omnigate --region sin
 fly postgres create --name omnigate-db --region sin --vm-size shared-cpu-1x --initial-cluster-size 1
 fly postgres attach omnigate-db                                 # sets DATABASE_URL
 fly redis create --name omnigate-redis --region sin             # Upstash; copy REDIS_URL
 fly secrets set REDIS_URL=rediss://... JWT_SECRET=$(openssl rand -hex 32) \
   API_KEY_PEPPER=$(openssl rand -hex 32) ADMIN_JWT_SECRET=$(openssl rand -hex 32) \
-  ADMIN_EMAIL=you@example.com ADMIN_PASSWORD='<strong>' LLM_API_KEY=... TRUST_PROXY=true \
-  CORS_ORIGIN=https://omnigate.fly.dev
+  ADMIN_EMAIL=you@example.com ADMIN_PASSWORD='<strong>' TRUST_PROXY=true \
+  CORS_ORIGIN=https://omnigate.fly.dev ANOMALY_ENFORCE=false
+fly proxy 5432 -a omnigate-db &                                 # then migrate from your machine:
+docker run --rm -e DATABASE_URL='postgresql://...@localhost:5432/omnigate' ghcr.io/elixirpoison/omnigate-migrate:latest
 fly deploy
+fly ssh console -C "node dist/prisma/seed.js"                    # once; admin + policies only
 ```
-`fly.toml` essentials:
+
+`fly.toml` essentials, with no `release_command` because the runtime image cannot run one:
+
 ```toml
-[deploy]  release_command = "node node_modules/prisma/build/index.js migrate deploy"
 [http_service]  internal_port = 8080  force_https = true  auto_stop_machines = false  min_machines_running = 1
 [[http_service.checks]]  path = "/readyz"  interval = "15s"  timeout = "3s"
 ```
-Seed once: `fly ssh console -C "node dist/prisma/seed.js"`.
 
 ## 5. Release checklist (copy into the release issue)
 
@@ -112,12 +145,12 @@ Seed once: `fly ssh console -C "node dist/prisma/seed.js"`.
 - [ ] CI green on `main` (lint, types, unit, integration, image build)
 - [ ] `CHANGELOG.md` updated; version bumped
 - [ ] New migrations reviewed; tested on a copy of prod data (`pg_dump | psql` into local)
-- [ ] New env vars added to Fly secrets **before** deploy
-- [ ] `docker compose -f compose.prod.yml up` smoke passes locally (`/readyz`, `/dashboard`, one proxied call)
+- [ ] New env vars added to the platform's secrets **before** deploy
+- [ ] `sh tools/smoke-prod.sh` passes against the demo stack (`/readyz`, `/`, one proxied call, headers)
 - [ ] Rollback plan below re-read; previous image tag noted: `________`
 
 ### Deploy
-- [ ] `fly deploy` completes; release command (migrate) succeeded in logs
+- [ ] migrate image ran against the target database; `fly deploy` completes
 - [ ] `/readyz` 200 from public URL
 - [ ] Smoke: login to dashboard; `curl -H "X-API-Key: …" $URL/api/mock/items` → 200 with `X-Request-Id`
 - [ ] Rate-limit smoke: 101 requests → 429 with headers

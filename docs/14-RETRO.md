@@ -14,9 +14,9 @@ assertion survived contact with measurement.
 atomic Lua call evaluating every applicable bucket, all-or-nothing, with a refused request consuming
 nothing anywhere. An off-the-shelf package would have been three lines and nothing to talk about.
 
-**Fail-open everywhere except auth and rate limiting.** The chaos test pays this back directly:
-Redis stopped for ten seconds mid-run, zero 5xx, 1,113 degraded responses, recovery in about a
-second.
+**Fail-open everywhere except auth.** The limiter degrades with a header, and `RL_FAIL_OPEN=false`
+is the opt-in to fail closed instead. The chaos test pays this back directly: Redis stopped for ten
+seconds mid-run, zero 5xx, 1,113 degraded responses, recovery in about a second.
 
 **Committing the artefacts.** k6 summaries, the eval sweeps, the threshold CSVs. It costs nothing at
 the time and it is the difference between claiming something and having measured it.

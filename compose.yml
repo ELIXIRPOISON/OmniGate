@@ -4,7 +4,7 @@
 #
 # Local development stack (docs/08 S1-08, docs/10 §2): gateway with hot reload, mock upstream,
 # Redis and Postgres. `docker compose up`, then seed once with
-# `docker compose exec gateway pnpm --filter @omnigate/gateway seed` and follow the printed curl.
+# `docker compose exec gateway pnpm --filter @omnigate/gateway seed -- --demo` and follow the printed curl.
 #
 # Values from ./.env (copy of .env.example) flow in via env_file; the entries under `environment`
 # override the ones that must point at container hostnames.
@@ -45,7 +45,7 @@ services:
       DATABASE_URL: postgresql://omnigate:omnigate@postgres:5432/omnigate
       REDIS_URL: redis://redis:6379
       MOCK_UPSTREAM_URL: http://mock-upstream:3001
-      ROUTES_FILE: ./routes.yaml
+      ROUTES_FILE: ./routes.demo.yaml
       ALLOW_PRIVATE_UPSTREAMS: "true"
       EXPOSE_ANOMALY_SCORE: "true"
       JWT_SECRET: ${JWT_SECRET:-dev-only-change-me-to-32-plus-random-bytes}

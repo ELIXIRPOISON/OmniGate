@@ -13,7 +13,8 @@ learned anomaly detection, a partitioned audit log, an admin API and a dashboard
   Bodies stream through untouched, hop-by-hop and internal headers stripped, `X-Forwarded-*` honoured
   only when a proxy is trusted. Timeouts enforced by the gateway's own timer, because the proxy
   engine reports a socket reset instead of a timeout.
-- **Auth.** HS256 or RS256 JWTs and API keys, with scopes. Keys are stored as peppered hashes with a
+- **Auth.** HS256 or RS256 JWTs and API keys, with scopes. `JWT_ISSUER` and `JWT_AUDIENCE` pin the
+  claims when the JWKS belongs to a shared identity provider. Keys are stored as peppered hashes with a
   prefix lookup, cached in Redis including negative results, compared in constant time.
 - **Rate limiting.** A sliding window written in Lua, evaluating every applicable bucket in one
   atomic call. A refused request consumes nothing in any bucket. Rate-limit headers on every
@@ -38,6 +39,8 @@ learned anomaly detection, a partitioned audit log, an admin API and a dashboard
   rest. On its own it detects more than all eight of the original signals combined. Learning is
   poison-resistant, silent during warmup, and disables itself on routes whose parameters are
   open-ended.
+- **`ANOMALY_ENFORCE`.** One switch over every refusal the anomaly stage can make, for running
+  observe-only until the review queue has earned trust.
 - **Escalate-only second stage.** A model may raise a score, never lower one, except on a confident
   `benign`. Added after a measured run in which a weak model overwrote confident findings and took
   recall from 0.900 to 0.433.
@@ -53,7 +56,13 @@ learned anomaly detection, a partitioned audit log, an admin API and a dashboard
 - Single production image, 392 MB, non-root, with a healthcheck. The Prisma CLI and the query
   compilers for four unused databases are kept out of it.
 - Migrations run from their own stage, which the gateway waits on.
-- Refuses to boot in production on any value `.env.example` ships with.
+- Refuses to boot in production on the four placeholder secrets `.env.example` ships with and on
+  `EXPOSE_ANOMALY_SCORE=true`.
+- `compose.prod.yml` is a production template: empty route table, no mock upstream, observe-only
+  anomaly mode, stores overridable by URL, port bound to loopback. `compose.demo.yml` layers the
+  five-minute tour on top.
+- The seed creates the admin and the three policies; `--demo` adds the demo routes and key.
+- Images published to GHCR on each release: `omnigate` and `omnigate-migrate`.
 - Security headers on the dashboard and control plane, deliberately not on proxied responses.
 - `tools/smoke-prod.sh`: 27 end-to-end checks against the built image.
 

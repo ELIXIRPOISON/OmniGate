@@ -180,3 +180,18 @@ describe('parameterFields', () => {
     ]);
   });
 });
+
+describe('learnableScore', () => {
+  it('ignores the schema signal when deciding whether a request may teach the schema', async () => {
+    const { learnableScore } = await import('./schema.service.js');
+    const quiet = {
+      injection_patterns: 0, body_size_z: 0, entropy: 0, burst: 0, path_enum: 0,
+      ua_anomaly: 0, auth_failures: 0, method_mismatch: 0, unknown_param: 1,
+    };
+    // A request whose only oddity is a name the route has not seen must remain learnable,
+    // otherwise no new parameter can ever be promoted after warmup.
+    expect(learnableScore(quiet)).toBe(0);
+    // Any other signal still counts against it.
+    expect(learnableScore({ ...quiet, injection_patterns: 1 })).toBeGreaterThan(0.7);
+  });
+});

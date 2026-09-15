@@ -93,7 +93,7 @@ COPY --from=proddeps --chown=app:app /repo/apps/gateway/node_modules ./apps/gate
 COPY --from=proddeps --chown=app:app /repo/packages/shared/node_modules ./packages/shared/node_modules
 COPY --from=build --chown=app:app /repo/packages/shared/package.json ./packages/shared/
 COPY --from=build --chown=app:app /repo/packages/shared/dist ./packages/shared/dist
-COPY --from=build --chown=app:app /repo/apps/gateway/package.json /repo/apps/gateway/routes.yaml ./apps/gateway/
+COPY --from=build --chown=app:app /repo/apps/gateway/package.json /repo/apps/gateway/routes.yaml /repo/apps/gateway/routes.demo.yaml ./apps/gateway/
 COPY --from=build --chown=app:app /repo/apps/gateway/dist ./apps/gateway/dist
 COPY --from=build --chown=app:app /repo/apps/dashboard/dist ./apps/gateway/public/dashboard
 USER app

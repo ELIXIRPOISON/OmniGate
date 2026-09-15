@@ -49,6 +49,7 @@ describe('auth + readiness (integration, real Redis + Postgres)', () => {
   let upstream: Server;
   let tmp: string;
   let seeded: SeedResult;
+  let demoKey: NonNullable<SeedResult['demoKey']>;
   let prisma: PrismaService;
 
   beforeAll(async () => {
@@ -94,11 +95,14 @@ describe('auth + readiness (integration, real Redis + Postgres)', () => {
 
     prisma = app.get(PrismaService);
     seeded = await seed(prisma, {
+      demo: true,
       adminEmail: 'admin@example.com',
       adminPassword: 'admin',
       pepper: PEPPER,
       mockUpstreamUrl: `http://127.0.0.1:${up.port}`,
     });
+    if (!seeded.demoKey) throw new Error('seed --demo did not create the demo key');
+    demoKey = seeded.demoKey;
     // Suites share one Redis, so start from a clean slate: otherwise an earlier suite's
     // rate-limit buckets for anon:127.0.0.1 make the anonymous test here a 429.
     const redis = app.get(RedisService);
@@ -140,20 +144,20 @@ describe('auth + readiness (integration, real Redis + Postgres)', () => {
         where: { service: { in: ['mock', 'orders'] } },
       }),
     ).toBe(2);
-    expect(seeded.demoKey.raw).toMatch(/^gw_live_[0-9A-Za-z]{32}$/);
+    expect(demoKey.raw).toMatch(/^gw_live_[0-9A-Za-z]{32}$/);
     const stored = await prisma.apiKey.findUnique({
-      where: { id: seeded.demoKey.id },
+      where: { id: demoKey.id },
     });
-    expect(stored?.keyHash).not.toContain(seeded.demoKey.raw.slice(8));
+    expect(stored?.keyHash).not.toContain(demoKey.raw.slice(8));
   });
 
   it('happy path: demo API key reaches the upstream with X-Gateway-Principal api_key:<id>', async () => {
     const res = await http()
       .get('/api/secure/x')
-      .set('X-API-Key', seeded.demoKey.raw)
+      .set('X-API-Key', demoKey.raw)
       .expect(200);
     expect(res.body.headers['x-gateway-principal']).toBe(
-      `api_key:${seeded.demoKey.id}`,
+      `api_key:${demoKey.id}`,
     );
     expect(res.body.headers['x-api-key']).toBeUndefined();
   });
@@ -204,7 +208,7 @@ describe('auth + readiness (integration, real Redis + Postgres)', () => {
   it('403: valid credentials but wrong scope', async () => {
     const res = await http()
       .get('/api/admin/x')
-      .set('X-API-Key', seeded.demoKey.raw)
+      .set('X-API-Key', demoKey.raw)
       .expect(403);
     expect(res.body).toMatchObject({
       type: 'https://gw/errors/forbidden',
@@ -220,50 +224,50 @@ describe('auth + readiness (integration, real Redis + Postgres)', () => {
 
   it('403: revoked key, immediately after cache invalidation', async () => {
     await prisma.apiKey.update({
-      where: { id: seeded.demoKey.id },
+      where: { id: demoKey.id },
       data: { status: 'revoked' },
     });
-    await app.get(ApiKeyService).invalidate(seeded.demoKey.prefix);
+    await app.get(ApiKeyService).invalidate(demoKey.prefix);
     const res = await http()
       .get('/api/secure/x')
-      .set('X-API-Key', seeded.demoKey.raw)
+      .set('X-API-Key', demoKey.raw)
       .expect(403);
     expect(res.body.detail).toContain('revoked');
     await prisma.apiKey.update({
-      where: { id: seeded.demoKey.id },
+      where: { id: demoKey.id },
       data: { status: 'active' },
     });
-    await app.get(ApiKeyService).invalidate(seeded.demoKey.prefix);
+    await app.get(ApiKeyService).invalidate(demoKey.prefix);
   });
 
   it('403: expired key', async () => {
     await prisma.apiKey.update({
-      where: { id: seeded.demoKey.id },
+      where: { id: demoKey.id },
       data: { expiresAt: new Date(Date.now() - 1000) },
     });
-    await app.get(ApiKeyService).invalidate(seeded.demoKey.prefix);
+    await app.get(ApiKeyService).invalidate(demoKey.prefix);
     const res = await http()
       .get('/api/secure/x')
-      .set('X-API-Key', seeded.demoKey.raw)
+      .set('X-API-Key', demoKey.raw)
       .expect(403);
     expect(res.body.detail).toContain('expired');
     await prisma.apiKey.update({
-      where: { id: seeded.demoKey.id },
+      where: { id: demoKey.id },
       data: { expiresAt: null },
     });
-    await app.get(ApiKeyService).invalidate(seeded.demoKey.prefix);
+    await app.get(ApiKeyService).invalidate(demoKey.prefix);
   });
 
   it('records lastUsedAt after use (asynchronously, throttled)', async () => {
     await http()
       .get('/api/secure/x')
-      .set('X-API-Key', seeded.demoKey.raw)
+      .set('X-API-Key', demoKey.raw)
       .expect(200);
     let lastUsedAt: Date | null = null;
     for (let i = 0; i < 20 && !lastUsedAt; i++) {
       await new Promise((r) => setTimeout(r, 50));
       lastUsedAt =
-        (await prisma.apiKey.findUnique({ where: { id: seeded.demoKey.id } }))
+        (await prisma.apiKey.findUnique({ where: { id: demoKey.id } }))
           ?.lastUsedAt ?? null;
     }
     expect(lastUsedAt).toBeInstanceOf(Date);
@@ -272,12 +276,12 @@ describe('auth + readiness (integration, real Redis + Postgres)', () => {
   it('caches the key lookup in Redis under key:{prefix} with a TTL', async () => {
     await http()
       .get('/api/secure/x')
-      .set('X-API-Key', seeded.demoKey.raw)
+      .set('X-API-Key', demoKey.raw)
       .expect(200);
     const redis = app.get(RedisService);
-    const hash = await redis.client.hgetall(`key:${seeded.demoKey.prefix}`);
-    expect(hash.id).toBe(seeded.demoKey.id);
-    const ttl = await redis.client.ttl(`key:${seeded.demoKey.prefix}`);
+    const hash = await redis.client.hgetall(`key:${demoKey.prefix}`);
+    expect(hash.id).toBe(demoKey.id);
+    const ttl = await redis.client.ttl(`key:${demoKey.prefix}`);
     expect(ttl).toBeGreaterThan(0);
     expect(ttl).toBeLessThanOrEqual(60);
   });
@@ -285,7 +289,7 @@ describe('auth + readiness (integration, real Redis + Postgres)', () => {
   it('still proxies 404/502 semantics with credentials present', async () => {
     await http()
       .get('/api/nope/x')
-      .set('X-API-Key', seeded.demoKey.raw)
+      .set('X-API-Key', demoKey.raw)
       .expect(404);
   });
 });

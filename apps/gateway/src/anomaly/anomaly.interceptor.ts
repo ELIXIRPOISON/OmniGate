@@ -19,6 +19,7 @@ import { combineScores } from './combine.js';
 import { parameterFields } from './params.js';
 import {
   RouteSchemaService,
+  learnableScore,
   unknownParamSignal,
   valueShapeSignal,
   EMPTY_SCHEMA,
@@ -172,10 +173,11 @@ export class AnomalyInterceptor implements NestInterceptor {
       // Widen the schema only from requests the upstream accepted *and* the inline pass found
       // unremarkable, so a request must look benign to two independent judges before it can teach
       // the route a new parameter name. Fire-and-forget: this is off the response path.
+      // Judged on every signal except the schema's own; see learnableScore for why.
       if (
         this.env.SCHEMA_LEARNING &&
         res.statusCode < 400 &&
-        heuristic.score < this.env.ANOMALY_GATE_THRESHOLD &&
+        learnableScore(heuristic.signals) < this.env.ANOMALY_GATE_THRESHOLD &&
         fields.length > 0
       ) {
         void this.schema
@@ -278,6 +280,7 @@ export class AnomalyInterceptor implements NestInterceptor {
     heuristic: HeuristicResult,
   ): boolean {
     return (
+      this.env.ANOMALY_ENFORCE &&
       route.block_on_heuristic &&
       heuristic.signals.injection_patterns >= 1 &&
       heuristic.score >= HEURISTIC_FAST_BLOCK_SCORE
@@ -305,7 +308,11 @@ export class AnomalyInterceptor implements NestInterceptor {
       ? combineScores(envelope.heuristics.score, classification.verdict)
       : undefined;
 
-    if (score !== undefined && score >= this.env.ANOMALY_BLOCK_THRESHOLD) {
+    if (
+      this.env.ANOMALY_ENFORCE &&
+      score !== undefined &&
+      score >= this.env.ANOMALY_BLOCK_THRESHOLD
+    ) {
       verdict.blocked = true;
       await this.events.record(envelope, classification, {
         blocked: true,

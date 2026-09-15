@@ -1,0 +1,30 @@
+# Demo overlay. Layer it on the production file to get the bundled mock upstream and the three demo
+# routes, without touching anything a real deployment uses:
+#
+#   docker compose -f compose.prod.yml -f compose.demo.yml up --build -d
+#   docker compose -f compose.prod.yml -f compose.demo.yml exec gateway node dist/prisma/seed.js --demo
+#   sh tools/smoke-prod.sh "$KEY"
+
+services:
+  gateway:
+    environment:
+      ROUTES_FILE: ./routes.demo.yaml
+      MOCK_UPSTREAM_URL: http://mock-upstream:3001
+      # The demo is meant to be poked at, so enforcement is on to show a 403.
+      ANOMALY_ENFORCE: 'true'
+    depends_on:
+      mock-upstream:
+        condition: service_started
+
+  mock-upstream:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    command: >
+      sh -c "pnpm --filter @omnigate/mock-upstream build
+      && pnpm --filter @omnigate/mock-upstream start"
+    environment:
+      PORT: 3001
+    expose:
+      - '3001'

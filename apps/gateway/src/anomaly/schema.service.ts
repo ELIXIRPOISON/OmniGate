@@ -2,7 +2,22 @@ import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { PinoLogger } from 'nestjs-pino';
 import { RedisService } from '../redis/redis.service.js';
+import { noisyOr, type SignalScores } from './heuristics.js';
 import type { ParamField } from './params.js';
+
+/**
+ * The score used to decide whether a successful request may teach the schema.
+ *
+ * It must exclude the schema's own signal. Once a route is warm, a request carrying a genuinely new
+ * parameter fires `unknown_param` and clears the gate on that alone, so gating learning on the full
+ * score meant no new name could ever be observed, let alone promoted: drift handling was dead on
+ * arrival. Judging learnability on every *other* signal restores the intended rule - two independent
+ * judges, the upstream's 2xx and the pattern/behavioural pass - without letting the schema veto its
+ * own updates.
+ */
+export function learnableScore(signals: SignalScores): number {
+  return noisyOr({ ...signals, unknown_param: 0 });
+}
 
 /**
  * Per-route parameter schema, learned from traffic.
